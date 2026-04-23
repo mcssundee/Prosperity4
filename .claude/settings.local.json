@@ -8,7 +8,15 @@
       "Bash(git commit -m 'Initial project structure for Prosperity 4 *)",
       "Skill(update-config)",
       "Bash(git remote *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(curl *)",
+      "Bash(curl -s https://raw.githubusercontent.com/nabayansaha/imc-prosperity-4-backtester/master/prosperity4bt/datamodel.py)",
+      "Read(//tmp/**)",
+      "Bash(pip install *)",
+      "Bash(prosperity4btest --version)",
+      "Bash(python3 -m pip install --upgrade prosperity4btest)",
+      "Bash(python3 -m prosperity4bt --help)",
+      "Bash(python3 *)"
     ]
   }
 }
