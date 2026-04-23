@@ -1,24 +1,28 @@
 from utils.datamodel import TradingState, Order
 
-POSITION_LIMIT = 50
+POSITION_LIMIT = 80
 
 
 class Trader:
+    def bid(self):
+        return 10
+
     def run(self, state: TradingState) -> tuple[dict[str, list[Order]], int, str]:
-        """Immediate close strategy: buy and sell each tick to lock in spread."""
         result = {}
 
         for symbol, depth in state.order_depths.items():
-            if not depth.buy_orders or not depth.sell_orders:
-                continue
-
-            best_bid = max(depth.buy_orders)
-            best_ask = min(depth.sell_orders)
             orders = []
+            pos = state.position.get(symbol, 0)
 
-            qty = 1
-            orders.append(Order(symbol, int(best_ask), qty))
-            orders.append(Order(symbol, int(best_bid), -qty))
+            if depth.buy_orders:
+                bid = max(depth.buy_orders)
+                if pos < POSITION_LIMIT:
+                    orders.append(Order(symbol, bid, 10))
+
+            if depth.sell_orders:
+                ask = min(depth.sell_orders)
+                if pos > -POSITION_LIMIT:
+                    orders.append(Order(symbol, ask, -10))
 
             result[symbol] = orders
 

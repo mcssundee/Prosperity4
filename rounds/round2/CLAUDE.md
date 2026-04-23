@@ -1,26 +1,15 @@
-# Round X — Context
+# Round 2 — Algo Trading
 
-## New Products This Round
-- [Product A]: [description, mechanics]
-- [Product B]: [description, mechanics]
+## Products & Limits
+- `ASH_COATED_OSMIUM`: limit 80
+- `INTARIAN_PEPPER_ROOT`: limit 80
 
-## Position Limits
-| Product   | Limit |
-|-----------|-------|
-| ProductA  | 50    |
-| ProductB  | 50    |
+## Market Access Fee (MAF)
+Add `bid()` method to return MAF bid amount (int). Top 50% bids (by median) get 25% extra order book flow. Fee deducted from profit: `final_pnl = profit - bid`.
 
-## Rule Changes from Previous Round
-- [list any changes]
-
-## Active Strategies
-- [List which strategies from `strategies/` are being used]
-- Example: market_making.py → applied to ProductA
-
-## Manual Section
-- Task: [describe what the manual trading section involves]
-- Key tool: `manual/calculator.py`
-- Deadline notes: [any timing constraints]
-
-## Known Issues / Watch Out For
-- [Record issues discovered during backtesting]
+## Manual: Invest & Expand
+Budget: 50,000 XIRECs across Research/Scale/Speed.  
+Formula: `PnL = (Research × Scale × Speed) − Budget_Used`
+- Research: logarithmic 0→200k
+- Scale: linear 0→7  
+- Speed: rank-based 0.1→0.9
