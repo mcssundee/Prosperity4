@@ -9,3 +9,7 @@ data/raw/
 .DS_Store
 .vscode/
 .idea/
+.claude/settings.local.json
+*.pkl
+*.pickle
+node_modules/

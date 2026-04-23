@@ -1,0 +1,30 @@
+{
+  "enabledMcpjsonServers": ["github"],
+  "model": "haiku",
+  "effortLevel": "medium",
+  "permissions": {
+    "defaultMode": "auto",
+    "allow": [
+      "Bash(git *)",
+      "Bash(python *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Read",
+      "Edit(.claude)",
+      "Edit(rounds/**)",
+      "Edit(strategies/**)",
+      "Write(rounds/**)",
+      "Write(strategies/**)",
+      "Write(trader.py)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Write(data/raw/**)"
+    ]
+  },
+  "autoMemoryEnabled": false,
+  "spinnerTipsEnabled": false,
+  "promptSuggestionEnabled": false,
+  "respectGitignore": true,
+  "includeGitInstructions": false
+}
