@@ -116,12 +116,12 @@ class Trader:
             buy_threshold = fair_value + (1 if pos < -15 else 0)
             sell_threshold = fair_value - (1 if pos > 15 else 0)
             for ask_px in asks:
-                if ask_px <= buy_threshold and buy_qty != 0 and pos <= 40:
+                if ask_px <= buy_threshold and buy_qty != 0 and pos <= 60:
                     result.append(Order('ASH_COATED_OSMIUM', ask_px, buy_qty))
                     buy_qty = 0
                     break
             for bid_px in bids:
-                if bid_px >= sell_threshold and sell_qty != 0 and pos >= -40:
+                if bid_px >= sell_threshold and sell_qty != 0 and pos >= -60:
                     result.append(Order('ASH_COATED_OSMIUM', bid_px, -sell_qty))
                     sell_qty = 0
                     break
