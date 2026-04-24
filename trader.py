@@ -138,9 +138,9 @@ DEEP_OTM = {'VEV_6000', 'VEV_6500'}
 ACTIVE_STRIKES = {k for k in VOUCHER_STRIKES if k not in DEEP_ITM and k not in DEEP_OTM}
 
 IV_WINDOW = 50        # rolling IV history per strike
-SMILE_THRESH = 1.5    # price tick deviation from smile to trigger trade
+DIFF_WINDOW = 100     # rolling window for (BS_fair - market_mid) per strike
+DIFF_THRESH = 0.5     # deviation from rolling mean to trigger trade (price ticks)
 OPT_POS_LIM = 50      # per-strike position cap
-OPT_PASSIVE_QTY = 2   # passive quote size for IV-scalped strikes
 ITM_QUOTE = 5         # passive quote size for deep-ITM
 # TTE at round-3 day-0 start:
 #   - live submission: 5 days (no PROSPERITY4BT_DAY env var)
@@ -326,10 +326,12 @@ class Trader:
         if spot is None:
             return result, {"opt_data": opt}
 
-        # ---- All active strikes: vol smile IV scalping + passive making ----
+        # ---- Active strikes: vol smile + rolling theo_diff scalping ----
         iv_hist = opt.get("iv_hist", {})
+        diff_hist = opt.get("diff_hist", {})  # rolling (BS_fair - market_mid) per strike
         current_ivs = {}
         moneynesses = {}
+        current_mids = {}
 
         for sym in ACTIVE_STRIKES:
             K = VOUCHER_STRIKES[sym]
@@ -343,6 +345,7 @@ class Trader:
             if iv is None:
                 continue
             current_ivs[sym] = iv
+            current_mids[sym] = mid
             moneynesses[sym] = math.log(K / spot) / math.sqrt(tte_days)
             hist = iv_hist.get(sym, [])
             hist.append(iv)
@@ -364,6 +367,20 @@ class Trader:
             smile_params = (0.0, 0.0, mean_iv)
         a, b, c = smile_params
 
+        # Compute smile fair prices and update rolling theo_diff per strike
+        for sym in ready_syms:
+            K = VOUCHER_STRIKES[sym]
+            m = moneynesses[sym]
+            smile_iv = max(a * m * m + b * m + c, 0.01)
+            fair_price = _bs_call(spot, K, tte_years, smile_iv)
+            theo_diff = fair_price - current_mids[sym]  # >0 = cheap, <0 = expensive
+            dh = diff_hist.get(sym, [])
+            dh.append(theo_diff)
+            if len(dh) > DIFF_WINDOW:
+                dh.pop(0)
+            diff_hist[sym] = dh
+        opt["diff_hist"] = diff_hist
+
         for sym in ready_syms:
             K = VOUCHER_STRIKES[sym]
             m = moneynesses[sym]
@@ -375,13 +392,18 @@ class Trader:
             pos = state.position.get(sym, 0)
             buy_cap = OPT_POS_LIM - pos
             sell_cap = OPT_POS_LIM + pos
-            fair_int = round(fair_price)
 
-            if best_ask < fair_price - SMILE_THRESH and buy_cap > 0:
+            dh = diff_hist.get(sym, [])
+            if len(dh) < 10:
+                continue
+            mean_diff = sum(dh) / len(dh)
+            curr_diff = fair_price - current_mids[sym]
+            # Unusually cheap (curr_diff far above mean) → BUY; unusually expensive → SELL
+            if curr_diff - mean_diff > DIFF_THRESH and buy_cap > 0:
                 qty = min(buy_cap, abs(od.sell_orders[best_ask]))
                 if qty > 0:
                     result[sym].append(Order(sym, best_ask, qty))
-            elif best_bid > fair_price + SMILE_THRESH and sell_cap > 0:
+            elif curr_diff - mean_diff < -DIFF_THRESH and sell_cap > 0:
                 qty = min(sell_cap, od.buy_orders[best_bid])
                 if qty > 0:
                     result[sym].append(Order(sym, best_bid, -qty))
