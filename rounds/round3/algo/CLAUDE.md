@@ -1,18 +1,33 @@
-# Round 3 — Algo Trading (GOAT)
+# Round 3 **- “Gloves Off”**
 
-## Overview
-Great Orbital Ascension Trials. Leaderboard resets. PnL starts at 0.
+Welcome to Solvenar! A prosperous and highly developed planet known for technological innovation, a robust economy, and thriving cultural sectors.
 
-## Products & Position Limits
-- HYDROGEL_PACK: 200
-- VELVETFRUIT_EXTRACT: 200
-- VELVETFRUIT_EXTRACT_VOUCHER (each): 300
+This awe-inspiring society will be the stage for the ***Great Orbital Ascension Trials*** (GOAT). In this Great Galactic Trade-Off, you will face other trading crews head-on as you compete for the coveted title of Trading Champion of the Galaxy. This trading round marks the start of GOAT, where ***all teams begin with zero PnL and the leaderboard is reset***.
 
-## Vouchers
-Vouchers (VEV_<strike>): options on VELVETFRUIT_EXTRACT. 
-Strikes: 4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500.
+You will develop a new Python program and incorporate your strategy for trading ***Hydrogel Packs*** (`HYDROGEL_PACK`), ***Velvetfruit Extract*** (`VELVETFRUIT_EXTRACT`), and ***10 Velvetfruit Extract Vouchers*** (`VELVETFRUIT_EXTRACT_VOUCHER`). These vouchers give you the right to buy Velvetfruit Extract at a later point for a specific strike price.
 
-## Time to Expiry (TTE)
-- TTE = 7d in Round 1, decrements by 1 each round
-- TTE = 5d in Round 3
-- Historical data: TTE=8d (tutorial), TTE=7d (R1), TTE=6d (R2)
+# **Round Objective**
+
+Create a new Python program that algorithmically trades `HYDROGEL_PACK`, `VELVETFRUIT_EXTRACT`, and `VELVETFRUIT_EXTRACT_VOUCHER` on your behalf and generates your first profit in this final phase.
+
+# **Algorithmic trading challenge: “Options Require Decisions”**
+
+There are 2 ‘asset classes’ in the three products you trade. The `HYDROGEL_PACK` and `VELVETFRUIT_EXTRACT` are “delta 1” products, similar to the products in the tutorial and rounds 1 and 2. The 10 `VELVETFRUIT_EXTRACT_VOUCHER` products (each with a different strike price) are options, and thus follow different dynamics. All products are traded independently, even though the price of `VELVETFRUIT_EXTRACT_VOUCHER` might be related to that of `VELVETFRUIT_EXTRACT` due to the nature of options.
+
+The vouchers are labeled `VEV_4000`, `VEV_4500`, `VEV_5000`, `VEV_5100`, `VEV_5200`, `VEV_5300`, `VEV_5400`, `VEV_5500`, `VEV_6000`, `VEV_6500`, where VEV stands for **V**elvetfruit **E**xtract **V**oucher, and the number represents the strike price. They all have a 7-day expiration deadline starting from round 1, where each round represents 1 day. Thus, the ‘time till expiry’ (TTE) is 7 days in round 1 (TTE=7d), 6 days in round 2, 5 days in round 3, and so on.
+
+The position limits are:
+
+- `HYDROGEL_PACK`: 200
+- `VELVETFRUIT_EXTRACT`: 200
+- `VELVETFRUIT_EXTRACT_VOUCHER`: 300 for each of the 10 vouchers.
+
+<aside>
+📃
+
+**Example**: `VEV_5000` is an option on the underlying VEV with a strike price of 5000 and a position limit of 50. At the start of the final simulation of Round 3, its time to expiry (TTE) is 5 days. In the historical data, the corresponding TTE values are:
+
+- TTE=8d in historical day 1 (coinciding with the tutorial round),
+- TTE=7d in historical day 2 (coinciding with Round 1),
+- TTE=6d in historical day 3 (coinciding with Round 2).
+</aside>

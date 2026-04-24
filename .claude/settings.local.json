@@ -33,7 +33,10 @@
       "Bash(jupyter nbconvert *)",
       "Bash(rm *)",
       "Bash(jupyter --version)",
-      "Bash(xargs -I{} sh -c ' jq -r \" select\\(.message.role == \\\\\"assistant\\\\\"\\) | .message.content[] | select\\(.type == \\\\\"tool_use\\\\\"\\) | if .name == \\\\\"Bash\\\\\" then \\\\\"BASH:\\\\\" + \\(.input.command // \\\\\"\\\\\"\\) else \\\\\"MCP:\\\\\" + .name end \" \"{}\" 2>/dev/null ')"
+      "Bash(xargs -I{} sh -c ' jq -r \" select\\(.message.role == \\\\\"assistant\\\\\"\\) | .message.content[] | select\\(.type == \\\\\"tool_use\\\\\"\\) | if .name == \\\\\"Bash\\\\\" then \\\\\"BASH:\\\\\" + \\(.input.command // \\\\\"\\\\\"\\) else \\\\\"MCP:\\\\\" + .name end \" \"{}\" 2>/dev/null ')",
+      "Bash(xargs cat *)",
+      "Bash(xargs ls *)",
+      "Bash(sort -t';' -k3)"
     ]
   }
 }
