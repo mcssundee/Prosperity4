@@ -31,7 +31,8 @@
       "Bash(gh api *)",
       "Bash(mkdir *)",
       "Bash(jupyter nbconvert *)",
-      "Bash(rm *)"
+      "Bash(rm *)",
+      "Bash(jupyter --version)"
     ]
   }
 }
