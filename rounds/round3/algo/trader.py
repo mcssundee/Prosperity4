@@ -137,12 +137,11 @@ DEEP_ITM = {'VEV_4000', 'VEV_4500'}
 DEEP_OTM = {'VEV_6000', 'VEV_6500'}
 ACTIVE_STRIKES = {k for k in VOUCHER_STRIKES if k not in DEEP_ITM and k not in DEEP_OTM}
 
-IV_WINDOW = 50        # rolling IV history length per strike
-SMILE_THRESH = 2.0    # price deviation from smile fair value to trigger active trade
-OPT_POS_LIM = 50      # per-strike position cap for IV scalping
+IV_WINDOW = 50        # rolling IV history per strike
+SMILE_THRESH = 1.5    # price tick deviation from smile to trigger trade
+OPT_POS_LIM = 50      # per-strike position cap
+OPT_PASSIVE_QTY = 2   # passive quote size for IV-scalped strikes
 ITM_QUOTE = 5         # passive quote size for deep-ITM
-# Near-ATM strikes where IV scalping is most reliable (deep ITM/OTM skipped)
-SMILE_STRIKES = {'VEV_5200', 'VEV_5300', 'VEV_5400', 'VEV_5500'}
 # TTE at round-3 day-0 start:
 #   - live submission: 5 days (no PROSPERITY4BT_DAY env var)
 #   - historical data: 8 - day_num (set by backtester env)
