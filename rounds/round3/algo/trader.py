@@ -37,39 +37,6 @@ class Logger:
 logger = Logger()
 
 
-def _norm_cdf(x: float) -> float:
-    return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
-
-
-def _bs_call(S: float, K: float, T: float, sigma: float) -> float:
-    if T <= 1e-9 or sigma <= 1e-9:
-        return max(S - K, 0.0)
-    sqrtT = math.sqrt(T)
-    d1 = (math.log(S / K) + 0.5 * sigma * sigma * T) / (sigma * sqrtT)
-    d2 = d1 - sigma * sqrtT
-    return S * _norm_cdf(d1) - K * _norm_cdf(d2)
-
-
-def _implied_vol(S: float, K: float, T: float, price: float):
-    if T <= 1e-9:
-        return None
-    intrinsic = max(S - K, 0.0)
-    if price <= intrinsic + 1e-9:
-        return None
-    lo, hi = 1e-6, 5.0
-    if _bs_call(S, K, T, hi) < price:
-        return None
-    for _ in range(100):
-        mid = (lo + hi) / 2.0
-        if _bs_call(S, K, T, mid) > price:
-            hi = mid
-        else:
-            lo = mid
-        if hi - lo < 1e-7:
-            break
-    return (lo + hi) / 2.0
-
-
 VOUCHER_STRIKES = {
     'VEV_4000': 4000, 'VEV_4500': 4500,
     'VEV_5000': 5000, 'VEV_5100': 5100,
@@ -78,19 +45,13 @@ VOUCHER_STRIKES = {
 }
 
 # (position_limit, passive_quote_qty)
-VOUCHER_CFG = {
-    'VEV_4000': (300, 5), 'VEV_4500': (300, 5),
-    'VEV_5000': (300, 8), 'VEV_5100': (300, 8),
-    'VEV_5200': (200, 5), 'VEV_5300': (200, 5),
+# Increased sizes for profitable near-ATM strikes
+VOUCHER_MM = {
+    'VEV_4000': (300, 8), 'VEV_4500': (300, 8),
+    'VEV_5000': (300, 10), 'VEV_5100': (300, 10),
+    'VEV_5200': (200, 6), 'VEV_5300': (200, 6),
     'VEV_5400': (100, 3), 'VEV_5500': (100, 3),
 }
-
-# Strikes used to calibrate the rolling IV (excludes deep ITM where IV is undefined)
-IV_SYMS = ('VEV_5000', 'VEV_5100', 'VEV_5200', 'VEV_5300', 'VEV_5400', 'VEV_5500')
-
-# TTE (days) at the START of round 3 live submission.
-# Vouchers issued at round 1 with 7-day expiry; round 3 = 5 days remaining.
-TTE_START = 5.0
 
 
 class Trader:
@@ -115,13 +76,13 @@ class Trader:
         return result, conversions, traderData
 
     # ------------------------------------------------------------------
-    # HYDROGEL_PACK — mean-reversion MM around 10000
+    # HYDROGEL_PACK — mean-reversion MM around fixed fair = 10000
     # ------------------------------------------------------------------
     def hydrogel(self, state: TradingState, shared: dict):
         product = 'HYDROGEL_PACK'
         result = []
         pos_lim = 200
-        quote_lim = 15
+        quote_lim = 20
         fair = 10000
 
         if product not in state.order_depths:
@@ -153,7 +114,7 @@ class Trader:
         return result, {}
 
     # ------------------------------------------------------------------
-    # VELVETFRUIT_EXTRACT — SMA-5 market maker
+    # VELVETFRUIT_EXTRACT — SMA-5 mid-price market maker
     # ------------------------------------------------------------------
     def vev_spot(self, state: TradingState, shared: dict):
         product = 'VELVETFRUIT_EXTRACT'
@@ -218,80 +179,50 @@ class Trader:
         return result, {"vev_bid_hist": bid_hist, "vev_ask_hist": ask_hist}
 
     # ------------------------------------------------------------------
-    # VEV Vouchers — BS fair value using rolling mean IV
+    # VEV Vouchers — SMA fair + aggressive take + passive make
     # ------------------------------------------------------------------
     def vev_options(self, state: TradingState, shared: dict):
         result = defaultdict(list)
-        opt = shared.get("vev_opt", {})
-        iv_buf = opt.get("iv_buf", [])  # rolling 10-tick buffer of cross-sectional mean IV
+        mid_hist = shared.get("vev_opt_mid_hist", {})
 
-        # Get VEV spot mid
-        vev_od = state.order_depths.get('VELVETFRUIT_EXTRACT')
-        if not vev_od or not vev_od.buy_orders or not vev_od.sell_orders:
-            return result, {"vev_opt": opt}
-        S = (max(vev_od.buy_orders) + min(vev_od.sell_orders)) / 2.0
-
-        # TTE: starts at TTE_START days, decreases within the day.
-        # Each day spans timestamps 0..999900 (10 000 ticks × 100 spacing).
-        tte_days = max(TTE_START - state.timestamp / 1_000_000.0, 0.001)
-        T = tte_days / 365.0
-
-        # Calibrate rolling IV from near-ATM options
-        ivs = []
-        for sym in IV_SYMS:
+        for sym, (pos_lim, quote_qty) in VOUCHER_MM.items():
             if sym not in state.order_depths:
                 continue
             od = state.order_depths[sym]
             if not od.buy_orders or not od.sell_orders:
                 continue
-            mid = (max(od.buy_orders) + min(od.sell_orders)) / 2.0
-            iv = _implied_vol(S, VOUCHER_STRIKES[sym], T, mid)
-            if iv is not None:
-                ivs.append(iv)
-
-        if ivs:
-            iv_buf.append(sum(ivs) / len(ivs))
-            if len(iv_buf) > 10:
-                iv_buf.pop(0)
-        opt["iv_buf"] = iv_buf
-
-        if not iv_buf:
-            return result, {"vev_opt": opt}
-
-        mean_iv = sum(iv_buf) / len(iv_buf)
-
-        # Quote every tradeable strike using BS fair
-        for sym, (pos_lim, quote_qty) in VOUCHER_CFG.items():
-            if sym not in state.order_depths:
-                continue
-            od = state.order_depths[sym]
-            if not od.buy_orders or not od.sell_orders:
-                continue
-
-            K = VOUCHER_STRIKES[sym]
             best_bid = max(od.buy_orders)
             best_ask = min(od.sell_orders)
-            fair = _bs_call(S, K, T, mean_iv)
+            mid = (best_bid + best_ask) / 2.0
+
+            K = VOUCHER_STRIKES[sym]
+            win = 13 if K <= 4500 else (11 if K <= 5100 else 15)
+            hist = mid_hist.get(sym, [])
+            hist.append(mid)
+            if len(hist) > win:
+                hist.pop(0)
+            mid_hist[sym] = hist
+            fair = sum(hist) / len(hist)
             fair_int = round(fair)
 
             pos = state.position.get(sym, 0)
             buy_cap = pos_lim - pos
             sell_cap = pos_lim + pos
 
-            # Aggressive take when market is on the wrong side of fair
+            # Aggressive take when market crosses SMA fair
             if best_ask < fair and buy_cap > 0:
-                qty = min(abs(od.sell_orders[best_ask]), buy_cap, quote_qty * 2)
-                result[sym].append(Order(sym, best_ask, qty))
-                buy_cap -= qty
+                take_qty = min(abs(od.sell_orders[best_ask]), buy_cap, quote_qty * 2)
+                result[sym].append(Order(sym, best_ask, take_qty))
+                buy_cap -= take_qty
             if best_bid > fair and sell_cap > 0:
-                qty = min(od.buy_orders[best_bid], sell_cap, quote_qty * 2)
-                result[sym].append(Order(sym, best_bid, -qty))
-                sell_cap -= qty
+                take_qty = min(od.buy_orders[best_bid], sell_cap, quote_qty * 2)
+                result[sym].append(Order(sym, best_bid, -take_qty))
+                sell_cap -= take_qty
 
-            # Passive make 1 tick around BS fair
+            # Passive make 1 tick around SMA fair
             if buy_cap > 0:
                 result[sym].append(Order(sym, fair_int - 1, min(quote_qty, buy_cap)))
             if sell_cap > 0:
                 result[sym].append(Order(sym, fair_int + 1, -min(quote_qty, sell_cap)))
 
-        return result, {"vev_opt": opt}
+        return result, {"vev_opt_mid_hist": mid_hist}
