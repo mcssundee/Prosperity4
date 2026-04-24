@@ -138,9 +138,9 @@ DEEP_OTM = {'VEV_6000', 'VEV_6500'}
 ACTIVE_STRIKES = {k for k in VOUCHER_STRIKES if k not in DEEP_ITM and k not in DEEP_OTM}
 
 IV_WINDOW = 50        # rolling IV history per strike
-SMILE_THRESH = 1.5    # price tick deviation from smile to trigger trade
+DIFF_WINDOW = 100     # rolling window for (BS_fair - market_mid) per strike
+DIFF_THRESH = 0.5     # deviation from rolling mean to trigger trade (price ticks)
 OPT_POS_LIM = 50      # per-strike position cap
-OPT_PASSIVE_QTY = 2   # passive quote size for IV-scalped strikes
 ITM_QUOTE = 5         # passive quote size for deep-ITM
 # TTE at round-3 day-0 start:
 #   - live submission: 5 days (no PROSPERITY4BT_DAY env var)
