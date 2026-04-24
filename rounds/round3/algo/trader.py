@@ -1,8 +1,6 @@
 from datamodel import OrderDepth, UserId, TradingState, Order
-from typing import List
 import json
 import math
-import os
 from collections import defaultdict
 
 
@@ -38,19 +36,13 @@ class Logger:
 
 logger = Logger()
 
-# ------------------------------------------------------------------
-# Black-Scholes helpers (pure stdlib, no scipy)
-# ------------------------------------------------------------------
 
 def _norm_cdf(x: float) -> float:
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
 
 
 def _bs_call(S: float, K: float, T: float, sigma: float) -> float:
-    """European call price (r=0). T in years, sigma annualised."""
-    if T <= 1e-9:
-        return max(S - K, 0.0)
-    if sigma <= 1e-9:
+    if T <= 1e-9 or sigma <= 1e-9:
         return max(S - K, 0.0)
     sqrtT = math.sqrt(T)
     d1 = (math.log(S / K) + 0.5 * sigma * sigma * T) / (sigma * sqrtT)
@@ -59,7 +51,6 @@ def _bs_call(S: float, K: float, T: float, sigma: float) -> float:
 
 
 def _implied_vol(S: float, K: float, T: float, price: float):
-    """Bisection IV search; returns None if ill-conditioned."""
     if T <= 1e-9:
         return None
     intrinsic = max(S - K, 0.0)
@@ -68,7 +59,7 @@ def _implied_vol(S: float, K: float, T: float, price: float):
     lo, hi = 1e-6, 5.0
     if _bs_call(S, K, T, hi) < price:
         return None
-    for _ in range(200):
+    for _ in range(100):
         mid = (lo + hi) / 2.0
         if _bs_call(S, K, T, mid) > price:
             hi = mid
@@ -79,72 +70,27 @@ def _implied_vol(S: float, K: float, T: float, price: float):
     return (lo + hi) / 2.0
 
 
-def _solve3x3(A: list, b: list):
-    """Gaussian elimination for 3×3 system Ax=b. Returns x or None."""
-    import copy
-    M = [A[i][:] + [b[i]] for i in range(3)]
-    for col in range(3):
-        pivot = max(range(col, 3), key=lambda r: abs(M[r][col]))
-        M[col], M[pivot] = M[pivot], M[col]
-        if abs(M[col][col]) < 1e-15:
-            return None
-        for row in range(col + 1, 3):
-            f = M[row][col] / M[col][col]
-            for j in range(col, 4):
-                M[row][j] -= f * M[col][j]
-    x = [0.0] * 3
-    for i in range(2, -1, -1):
-        x[i] = M[i][3]
-        for j in range(i + 1, 3):
-            x[i] -= M[i][j] * x[j]
-        x[i] /= M[i][i]
-    return x
-
-
-def _fit_quadratic(xs: list, ys: list):
-    """Least-squares quadratic fit y = a*x^2 + b*x + c.
-    Returns (a, b, c) or None if not enough data."""
-    n = len(xs)
-    if n < 3:
-        return None
-    s4 = s3 = s2 = s1 = s0 = sy2 = sy1 = sy0 = 0.0
-    for x, y in zip(xs, ys):
-        x2 = x * x
-        s4 += x2 * x2
-        s3 += x2 * x
-        s2 += x2
-        s1 += x
-        s0 += 1.0
-        sy2 += x2 * y
-        sy1 += x * y
-        sy0 += y
-    A = [[s4, s3, s2], [s3, s2, s1], [s2, s1, s0]]
-    b = [sy2, sy1, sy0]
-    return _solve3x3(A, b)
-
-
-# ------------------------------------------------------------------
-# Voucher configuration
-# ------------------------------------------------------------------
 VOUCHER_STRIKES = {
     'VEV_4000': 4000, 'VEV_4500': 4500,
     'VEV_5000': 5000, 'VEV_5100': 5100,
     'VEV_5200': 5200, 'VEV_5300': 5300,
     'VEV_5400': 5400, 'VEV_5500': 5500,
-    'VEV_6000': 6000, 'VEV_6500': 6500,
 }
-DEEP_OTM = {'VEV_6000', 'VEV_6500'}
-# Vouchers we market-make on; position cap and quote size per tier
-VOUCHER_MM = {
+
+# (position_limit, passive_quote_qty)
+VOUCHER_CFG = {
     'VEV_4000': (300, 5), 'VEV_4500': (300, 5),
-    'VEV_5000': (200, 3), 'VEV_5100': (200, 3),
-    'VEV_5200': (100, 2), 'VEV_5300': (100, 2),
-    'VEV_5400': (50,  1), 'VEV_5500': (50,  1),
+    'VEV_5000': (300, 8), 'VEV_5100': (300, 8),
+    'VEV_5200': (200, 5), 'VEV_5300': (200, 5),
+    'VEV_5400': (100, 3), 'VEV_5500': (100, 3),
 }
-MID_HIST_WINDOW = 11   # rolling mid SMA for voucher fair value
-# TTE at round-3 day-0 start:
-#   - live submission: 5 days (no PROSPERITY4BT_DAY env var)
-#   - historical data: 8 - day_num (set by backtester env)
+
+# Strikes used to calibrate the rolling IV (excludes deep ITM where IV is undefined)
+IV_SYMS = ('VEV_5000', 'VEV_5100', 'VEV_5200', 'VEV_5300', 'VEV_5400', 'VEV_5500')
+
+# TTE (days) at the START of round 3 live submission.
+# Vouchers issued at round 1 with 7-day expiry; round 3 = 5 days remaining.
+TTE_START = 5.0
 
 
 class Trader:
@@ -155,7 +101,7 @@ class Trader:
         if state.traderData:
             try:
                 shared = json.loads(state.traderData)
-            except json.JSONDecodeError:
+            except Exception:
                 pass
 
         result['HYDROGEL_PACK'], hp_data = self.hydrogel(state, shared)
@@ -185,11 +131,9 @@ class Trader:
         pos = state.position.get(product, 0)
         bids = sorted(od.buy_orders, reverse=True)
         asks = sorted(od.sell_orders)
-
         buy_cap = pos_lim - pos
         sell_cap = pos_lim + pos
 
-        # Active take
         for ask in asks:
             if ask < fair and buy_cap > 0:
                 qty = min(buy_cap, abs(od.sell_orders[ask]))
@@ -201,7 +145,6 @@ class Trader:
                 result.append(Order(product, bid, -qty))
                 sell_cap -= qty
 
-        # Passive make
         if buy_cap > 0:
             result.append(Order(product, fair - 1, min(quote_lim, buy_cap)))
         if sell_cap > 0:
@@ -248,7 +191,6 @@ class Trader:
         buy_cap = pos_lim - pos
         sell_cap = pos_lim + pos
 
-        # Active take
         for ask in asks:
             if ask <= fair - 1 and buy_cap > 0:
                 qty = min(buy_cap, abs(od.sell_orders[ask]))
@@ -262,7 +204,6 @@ class Trader:
                 sell_cap -= qty
                 break
 
-        # Passive make
         pb = next((p for p in bids if p + 1 <= fair), None)
         pa = next((p for p in asks if p - 1 >= fair), None)
         if pb is None and best_bid is not None and best_bid + 1 <= fair:
@@ -277,38 +218,80 @@ class Trader:
         return result, {"vev_bid_hist": bid_hist, "vev_ask_hist": ask_hist}
 
     # ------------------------------------------------------------------
-    # VEV Vouchers — rolling-SMA passive market making on all tradeable strikes
+    # VEV Vouchers — BS fair value using rolling mean IV
     # ------------------------------------------------------------------
     def vev_options(self, state: TradingState, shared: dict):
         result = defaultdict(list)
-        mid_hist = shared.get("vev_opt_mid_hist", {})
+        opt = shared.get("vev_opt", {})
+        iv_buf = opt.get("iv_buf", [])  # rolling 10-tick buffer of cross-sectional mean IV
 
-        for sym, (pos_lim, quote_qty) in VOUCHER_MM.items():
+        # Get VEV spot mid
+        vev_od = state.order_depths.get('VELVETFRUIT_EXTRACT')
+        if not vev_od or not vev_od.buy_orders or not vev_od.sell_orders:
+            return result, {"vev_opt": opt}
+        S = (max(vev_od.buy_orders) + min(vev_od.sell_orders)) / 2.0
+
+        # TTE: starts at TTE_START days, decreases within the day.
+        # Each day spans timestamps 0..999900 (10 000 ticks × 100 spacing).
+        tte_days = max(TTE_START - state.timestamp / 1_000_000.0, 0.001)
+        T = tte_days / 365.0
+
+        # Calibrate rolling IV from near-ATM options
+        ivs = []
+        for sym in IV_SYMS:
             if sym not in state.order_depths:
                 continue
             od = state.order_depths[sym]
             if not od.buy_orders or not od.sell_orders:
                 continue
+            mid = (max(od.buy_orders) + min(od.sell_orders)) / 2.0
+            iv = _implied_vol(S, VOUCHER_STRIKES[sym], T, mid)
+            if iv is not None:
+                ivs.append(iv)
+
+        if ivs:
+            iv_buf.append(sum(ivs) / len(ivs))
+            if len(iv_buf) > 10:
+                iv_buf.pop(0)
+        opt["iv_buf"] = iv_buf
+
+        if not iv_buf:
+            return result, {"vev_opt": opt}
+
+        mean_iv = sum(iv_buf) / len(iv_buf)
+
+        # Quote every tradeable strike using BS fair
+        for sym, (pos_lim, quote_qty) in VOUCHER_CFG.items():
+            if sym not in state.order_depths:
+                continue
+            od = state.order_depths[sym]
+            if not od.buy_orders or not od.sell_orders:
+                continue
+
+            K = VOUCHER_STRIKES[sym]
             best_bid = max(od.buy_orders)
             best_ask = min(od.sell_orders)
-            mid = (best_bid + best_ask) / 2.0
-
-            # Rolling SMA of mid price as fair value
-            hist = mid_hist.get(sym, [])
-            hist.append(mid)
-            if len(hist) > MID_HIST_WINDOW:
-                hist.pop(0)
-            mid_hist[sym] = hist
-            fair = sum(hist) / len(hist)
+            fair = _bs_call(S, K, T, mean_iv)
             fair_int = round(fair)
 
             pos = state.position.get(sym, 0)
             buy_cap = pos_lim - pos
             sell_cap = pos_lim + pos
 
+            # Aggressive take when market is on the wrong side of fair
+            if best_ask < fair and buy_cap > 0:
+                qty = min(abs(od.sell_orders[best_ask]), buy_cap, quote_qty * 2)
+                result[sym].append(Order(sym, best_ask, qty))
+                buy_cap -= qty
+            if best_bid > fair and sell_cap > 0:
+                qty = min(od.buy_orders[best_bid], sell_cap, quote_qty * 2)
+                result[sym].append(Order(sym, best_bid, -qty))
+                sell_cap -= qty
+
+            # Passive make 1 tick around BS fair
             if buy_cap > 0:
                 result[sym].append(Order(sym, fair_int - 1, min(quote_qty, buy_cap)))
             if sell_cap > 0:
                 result[sym].append(Order(sym, fair_int + 1, -min(quote_qty, sell_cap)))
 
-        return result, {"vev_opt_mid_hist": mid_hist}
+        return result, {"vev_opt": opt}

@@ -16,11 +16,11 @@
       "Write(rounds/**)",
       "Write(strategies/**)",
       "Write(trader.py)",
-      "NotebookEdit(rounds/**)"
-    ],
-    "deny": [
+      "NotebookEdit(rounds/**)",
       "Bash(rm -rf *)",
       "Write(data/raw/**)"
+    ],
+    "deny": [
     ]
   },
   "autoMemoryEnabled": false,

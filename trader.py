@@ -137,7 +137,7 @@ DEEP_OTM = {'VEV_6000', 'VEV_6500'}
 # Vouchers we market-make on; position cap and quote size per tier
 VOUCHER_MM = {
     'VEV_4000': (300, 5), 'VEV_4500': (300, 5),
-    'VEV_5000': (400, 3), 'VEV_5100': (400, 3),
+    'VEV_5000': (200, 3), 'VEV_5100': (200, 3),
     'VEV_5200': (100, 2), 'VEV_5300': (100, 2),
     'VEV_5400': (50,  1), 'VEV_5500': (50,  1),
 }
@@ -294,9 +294,11 @@ class Trader:
             mid = (best_bid + best_ask) / 2.0
 
             # Rolling SMA of mid price as fair value
+            K = VOUCHER_STRIKES[sym]
+            win = 13 if K <= 4500 else (11 if K <= 5100 else 15)
             hist = mid_hist.get(sym, [])
             hist.append(mid)
-            if len(hist) > MID_HIST_WINDOW:
+            if len(hist) > win:
                 hist.pop(0)
             mid_hist[sym] = hist
             fair = sum(hist) / len(hist)
