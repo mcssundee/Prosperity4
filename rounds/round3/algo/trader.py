@@ -100,7 +100,7 @@ def _solve3x3(A: list, b: list):
     return x
 
 
-def _fit_quadratic(xs: list, ys: list) -> tuple | None:
+def _fit_quadratic(xs: list, ys: list):
     """Least-squares quadratic fit y = a*x^2 + b*x + c.
     Returns (a, b, c) or None if not enough data."""
     n = len(xs)
