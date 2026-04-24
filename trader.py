@@ -137,12 +137,11 @@ DEEP_ITM = {'VEV_4000', 'VEV_4500'}
 DEEP_OTM = {'VEV_6000', 'VEV_6500'}
 ACTIVE_STRIKES = {k for k in VOUCHER_STRIKES if k not in DEEP_ITM and k not in DEEP_OTM}
 
-IV_WINDOW = 50        # rolling IV history length per strike
-SMILE_THRESH = 2.0    # price deviation from smile fair value to trigger active trade
-OPT_POS_LIM = 50      # per-strike position cap for IV scalping
+IV_WINDOW = 50        # rolling IV history per strike
+SMILE_THRESH = 1.5    # price tick deviation from smile to trigger trade
+OPT_POS_LIM = 50      # per-strike position cap
+OPT_PASSIVE_QTY = 2   # passive quote size for IV-scalped strikes
 ITM_QUOTE = 5         # passive quote size for deep-ITM
-# Near-ATM strikes where IV scalping is most reliable (deep ITM/OTM skipped)
-SMILE_STRIKES = {'VEV_5200', 'VEV_5300', 'VEV_5400', 'VEV_5500'}
 # TTE at round-3 day-0 start:
 #   - live submission: 5 days (no PROSPERITY4BT_DAY env var)
 #   - historical data: 8 - day_num (set by backtester env)
@@ -327,12 +326,12 @@ class Trader:
         if spot is None:
             return result, {"opt_data": opt}
 
-        # ---- Near-ATM strikes: vol smile IV scalping ----
+        # ---- All active strikes: vol smile IV scalping + passive making ----
         iv_hist = opt.get("iv_hist", {})
         current_ivs = {}
         moneynesses = {}
 
-        for sym in SMILE_STRIKES:
+        for sym in ACTIVE_STRIKES:
             K = VOUCHER_STRIKES[sym]
             if sym not in state.order_depths:
                 continue
@@ -352,7 +351,7 @@ class Trader:
             iv_hist[sym] = hist
         opt["iv_hist"] = iv_hist
 
-        # Need at least 3 warmed-up strikes to fit smile
+        # Need at least 3 warmed-up strikes for smile
         ready_syms = [s for s in current_ivs if len(iv_hist.get(s, [])) >= 10]
         if len(ready_syms) < 3:
             return result, {"opt_data": opt}
@@ -374,19 +373,23 @@ class Trader:
             best_bid = max(od.buy_orders)
             best_ask = min(od.sell_orders)
             pos = state.position.get(sym, 0)
+            buy_cap = OPT_POS_LIM - pos
+            sell_cap = OPT_POS_LIM + pos
+            fair_int = round(fair_price)
 
-            # Active take only — no passive making to avoid adverse selection
-            if best_ask < fair_price - SMILE_THRESH:
-                buy_cap = OPT_POS_LIM - pos
+            if best_ask < fair_price - SMILE_THRESH and buy_cap > 0:
+                qty = min(buy_cap, abs(od.sell_orders[best_ask]))
+                if qty > 0:
+                    result[sym].append(Order(sym, best_ask, qty))
+            elif best_bid > fair_price + SMILE_THRESH and sell_cap > 0:
+                qty = min(sell_cap, od.buy_orders[best_bid])
+                if qty > 0:
+                    result[sym].append(Order(sym, best_bid, -qty))
+            else:
+                # Passive market making around smile fair price
                 if buy_cap > 0:
-                    qty = min(buy_cap, abs(od.sell_orders[best_ask]))
-                    if qty > 0:
-                        result[sym].append(Order(sym, best_ask, qty))
-            elif best_bid > fair_price + SMILE_THRESH:
-                sell_cap = OPT_POS_LIM + pos
+                    result[sym].append(Order(sym, fair_int - 1, min(OPT_PASSIVE_QTY, buy_cap)))
                 if sell_cap > 0:
-                    qty = min(sell_cap, od.buy_orders[best_bid])
-                    if qty > 0:
-                        result[sym].append(Order(sym, best_bid, -qty))
+                    result[sym].append(Order(sym, fair_int + 1, -min(OPT_PASSIVE_QTY, sell_cap)))
 
         return result, {"opt_data": opt}

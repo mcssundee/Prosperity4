@@ -385,11 +385,5 @@ class Trader:
                 qty = min(sell_cap, od.buy_orders[best_bid])
                 if qty > 0:
                     result[sym].append(Order(sym, best_bid, -qty))
-            else:
-                # Passive market making around smile fair price
-                if buy_cap > 0:
-                    result[sym].append(Order(sym, fair_int - 1, min(OPT_PASSIVE_QTY, buy_cap)))
-                if sell_cap > 0:
-                    result[sym].append(Order(sym, fair_int + 1, -min(OPT_PASSIVE_QTY, sell_cap)))
 
         return result, {"opt_data": opt}
