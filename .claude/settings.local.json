@@ -28,7 +28,8 @@
       "Bash(cp rounds/round2/algo/trader.py /tmp/trader_baseline.py)",
       "Bash(cp rounds/round2/algo/trader_v2_bollinger.py rounds/round2/algo/trader.py)",
       "Bash(bash -c 'git add -A && git diff --cached --quiet || git commit -m \"Auto-save: $\\(date \\\\\"+%Y-%m-%d %H:%M:%S\\\\\"\\)\" && git push origin dev 2>/dev/null || true')",
-      "Bash(gh api *)"
+      "Bash(gh api *)",
+      "Bash(mkdir *)"
     ]
   }
 }
