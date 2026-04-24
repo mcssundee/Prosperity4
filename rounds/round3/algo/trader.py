@@ -133,14 +133,15 @@ VOUCHER_STRIKES = {
     'VEV_5400': 5400, 'VEV_5500': 5500,
     'VEV_6000': 6000, 'VEV_6500': 6500,
 }
-DEEP_ITM = {'VEV_4000', 'VEV_4500'}
 DEEP_OTM = {'VEV_6000', 'VEV_6500'}
-ACTIVE_STRIKES = {k for k in VOUCHER_STRIKES if k not in DEEP_ITM and k not in DEEP_OTM}
-
-IV_WINDOW = 50        # rolling IV history per strike
-SMILE_THRESH = 1.5    # price-tick deviation from smile fair value to trigger trade
-OPT_POS_LIM = 50      # per-strike position cap
-ITM_QUOTE = 5         # passive quote size for deep-ITM
+# Vouchers we market-make on; position cap and quote size per tier
+VOUCHER_MM = {
+    'VEV_4000': (300, 5), 'VEV_4500': (300, 5),
+    'VEV_5000': (200, 3), 'VEV_5100': (200, 3),
+    'VEV_5200': (100, 2), 'VEV_5300': (100, 2),
+    'VEV_5400': (50,  1), 'VEV_5500': (50,  1),
+}
+MID_HIST_WINDOW = 3    # rolling mid SMA for voucher fair value
 # TTE at round-3 day-0 start:
 #   - live submission: 5 days (no PROSPERITY4BT_DAY env var)
 #   - historical data: 8 - day_num (set by backtester env)
