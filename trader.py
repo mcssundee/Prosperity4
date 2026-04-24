@@ -1,4 +1,5 @@
 from datamodel import TradingState, Order
+from typing import Optional
 import json
 from collections import defaultdict
 
@@ -25,7 +26,7 @@ class Trader:
 
     # ── helpers ──────────────────────────────────────────────────────────────
 
-    def vwap_mid(self, order_depth) -> float | None:
+    def vwap_mid(self, order_depth) -> Optional[float]:
         """Volume-weighted mid across full book — denoises transient best-bid/ask spikes."""
         bid_num = sum(p * v for p, v in order_depth.buy_orders.items())
         bid_vol = sum(order_depth.buy_orders.values())

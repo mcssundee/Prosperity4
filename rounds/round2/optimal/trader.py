@@ -157,19 +157,17 @@ class Trader:
         """
         Time-phase momentum strategy:
 
-        Phase 1 — Early game (timestamp < 1500, ~15% of day):
-          Aggressive accumulation: sweep ask book + passive orders 1 tick above best ask
-          to dominate queue and reach full inventory limit as fast as possible.
+        Phase 1 — Early game (timestamp < 1500):
+          Aggressive accumulation: sweep available asks at market price only.
+          No overpaying — buy at ask prices already in the book.
 
-        Phase 2 — Mid game (1500 ≤ timestamp < 9900):
-          Hold position. Allow trailing stop to protect against reversals.
-          Only re-enter after exit if trend signal confirms.
+        Phase 2 — Mid game (1500 ≤ timestamp < 9500):
+          Standard sweep: buy at first_ask + 2 tolerance or after ts 2000.
+          Trailing stop exits if mid drops 50 below peak; re-enters at peak - 20.
 
-        Phase 3 — End game (timestamp ≥ 9900, >99% of day):
-          Optimized exit: sweep bid book to liquidate entire position before close.
-
-        Trailing stop: exit when mid drops 50 below peak; re-enter when mid recovers to peak-20.
-        Linear regression trend: buy bias when slope > 0 (trend confirms accumulation).
+        Phase 3 — End game (timestamp ≥ 9500):
+          Hold position; unrealized PnL is locked in at final price.
+          Do not force-exit — the backtester marks open positions at close price.
         """
         product = "INTARIAN_PEPPER_ROOT"
         result = []
@@ -180,13 +178,11 @@ class Trader:
         first_ask = shared.get("root_first_ask")
         peak_price = shared.get("root_peak_price")
         exited = shared.get("root_exited", False)
-        price_hist = shared.get("root_price_hist", [])
 
         root_data = {
             "root_first_ask": first_ask,
             "root_peak_price": peak_price,
             "root_exited": exited,
-            "root_price_hist": price_hist,
         }
 
         if product not in state.order_depths:
@@ -196,49 +192,16 @@ class Trader:
         best_bid = max(order_depth.buy_orders.keys()) if order_depth.buy_orders else None
         best_ask = min(order_depth.sell_orders.keys()) if order_depth.sell_orders else None
 
-        if best_bid is None and best_ask is None:
-            return result, root_data
+        if best_bid is not None and best_ask is not None:
+            mid = (best_bid + best_ask) / 2.0
+            peak_price = mid if peak_price is None else max(peak_price, mid)
+            if not exited and mid < peak_price - 50:
+                exited = True
+            elif exited and mid > peak_price - 20:
+                exited = False
+            root_data = {"root_first_ask": first_ask, "root_peak_price": peak_price, "root_exited": exited}
 
-        mid = ((best_bid or 0) + (best_ask or 0)) / 2.0 if best_bid and best_ask else (best_bid or best_ask)
-
-        # Update price history for trend estimation (100-period window)
-        price_hist.append(mid)
-        if len(price_hist) > 100:
-            price_hist.pop(0)
-
-        # Linear trend slope (simple: last vs first over window)
-        trend_up = True
-        if len(price_hist) >= 10:
-            trend_up = price_hist[-1] > price_hist[0]
-
-        # Update peak for trailing stop
-        peak_price = mid if peak_price is None else max(peak_price, mid)
-        if not exited and mid < peak_price - 50:
-            exited = True
-        elif exited and mid > peak_price - 20:
-            exited = False
-
-        root_data = {
-            "root_first_ask": first_ask,
-            "root_peak_price": peak_price,
-            "root_exited": exited,
-            "root_price_hist": price_hist,
-        }
-
-        # ── Phase 3: End game exit ──
-        if ts >= 9900:
-            if pos > 0 and best_bid is not None:
-                # Sweep entire bid side to liquidate
-                remaining = pos
-                for bid_px in sorted(order_depth.buy_orders.keys(), reverse=True):
-                    if remaining <= 0:
-                        break
-                    qty = min(remaining, order_depth.buy_orders[bid_px])
-                    result.append(Order(product, bid_px, -qty))
-                    remaining -= qty
-            return result, root_data
-
-        # ── Trailing stop exit ──
+        # Trailing stop: sell down on exit signal
         if exited:
             if best_bid is not None and pos > 0:
                 sell_qty = min(order_depth.buy_orders.get(best_bid, pos), pos)
@@ -253,23 +216,21 @@ class Trader:
             first_ask = best_ask
             root_data["root_first_ask"] = first_ask
 
-        # ── Phase 1: Aggressive early accumulation (timestamp < 1500) ──
-        if ts < 1500 and trend_up:
-            if pos < pos_lim:
-                # Sweep entire ask side
-                remaining = pos_lim - pos
-                for ask_px in sorted(order_depth.sell_orders.keys()):
-                    if remaining <= 0:
-                        break
-                    qty = min(remaining, abs(order_depth.sell_orders[ask_px]))
-                    result.append(Order(product, ask_px, qty))
-                    remaining -= qty
-                # Additional passive order 1 tick above best ask to dominate queue
-                if remaining > 0 and best_bid is not None:
-                    result.append(Order(product, best_ask + 1, remaining))
+        # Phase 1: sweep available asks at market price, no premium
+        if ts < 1500 and pos < pos_lim:
+            remaining = pos_lim - pos
+            for ask_px in sorted(order_depth.sell_orders.keys()):
+                if remaining <= 0:
+                    break
+                qty = min(remaining, abs(order_depth.sell_orders[ask_px]))
+                result.append(Order(product, ask_px, qty))
+                remaining -= qty
+            # Passive penny-jump to fill any remaining gap
+            if remaining > 0 and best_bid is not None:
+                result.append(Order(product, best_bid + 1, remaining))
             return result, root_data
 
-        # ── Phase 2: Standard sweep with trend confirmation ──
+        # Phase 2: standard sweep — full pos_lim (not 76)
         if pos < pos_lim and (best_ask <= first_ask + 2 or ts >= 2000):
             qty = min(pos_lim - pos, abs(order_depth.sell_orders.get(best_ask, 1)))
             if qty > 0:
