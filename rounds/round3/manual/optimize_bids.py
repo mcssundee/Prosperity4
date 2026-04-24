@@ -95,7 +95,7 @@ for b1 in bid1_values:
             p_no_pen = 1.0
         else:
             no_penalty = b2 >= avg_b2
-            penalty = ((SELL_PRICE - avg_b2) / (SELL_PRICE - bid2)) ** 3
+            penalty = ((SELL_PRICE - avg_b2) / (SELL_PRICE - b2)) ** 3
             b2_profits = np.where(no_penalty, margin * n_eligible, margin * n_eligible * penalty)
             p_no_pen = float(no_penalty.mean())
 
@@ -157,7 +157,7 @@ for b1 in bid1_values:
             p_no_pen = 1.0
         else:
             no_penalty = b2 >= avg_b2
-            penalty = ((SELL_PRICE - avg_b2) / (SELL_PRICE - bid2)) ** 3
+            penalty = ((SELL_PRICE - avg_b2) / (SELL_PRICE - b2)) ** 3
             b2_profits = np.where(no_penalty, margin * n_eligible, margin * n_eligible * penalty)
             p_no_pen = float(no_penalty.mean())
 
@@ -218,7 +218,7 @@ for b1 in bid1_values:
             p_no_pen = 1.0
         else:
             no_penalty = b2 >= avg_b2
-            penalty = ((SELL_PRICE - avg_b2) / (SELL_PRICE - bid2)) ** 3
+            penalty = ((SELL_PRICE - avg_b2) / (SELL_PRICE - b2)) ** 3
             b2_profits = np.where(no_penalty, margin * n_eligible, margin * n_eligible * penalty)
             p_no_pen = float(no_penalty.mean())
 
