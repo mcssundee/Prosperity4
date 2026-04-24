@@ -2,6 +2,7 @@ from datamodel import OrderDepth, UserId, TradingState, Order
 from typing import List
 import json
 import math
+import os
 from collections import defaultdict
 
 
