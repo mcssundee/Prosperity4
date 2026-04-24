@@ -45,12 +45,11 @@ VOUCHER_STRIKES = {
 }
 
 # (position_limit, passive_quote_qty)
-# Increased sizes for profitable near-ATM strikes
 VOUCHER_MM = {
-    'VEV_4000': (300, 8), 'VEV_4500': (300, 8),
-    'VEV_5000': (300, 10), 'VEV_5100': (300, 10),
-    'VEV_5200': (200, 6), 'VEV_5300': (200, 6),
-    'VEV_5400': (100, 3), 'VEV_5500': (100, 3),
+    'VEV_4000': (300, 5), 'VEV_4500': (300, 5),
+    'VEV_5000': (200, 3), 'VEV_5100': (200, 3),
+    'VEV_5200': (100, 2), 'VEV_5300': (100, 2),
+    'VEV_5400': (50,  1), 'VEV_5500': (50,  1),
 }
 
 
@@ -179,7 +178,7 @@ class Trader:
         return result, {"vev_bid_hist": bid_hist, "vev_ask_hist": ask_hist}
 
     # ------------------------------------------------------------------
-    # VEV Vouchers — SMA fair + aggressive take + passive make
+    # VEV Vouchers — SMA fair value, passive make only
     # ------------------------------------------------------------------
     def vev_options(self, state: TradingState, shared: dict):
         result = defaultdict(list)
@@ -209,17 +208,6 @@ class Trader:
             buy_cap = pos_lim - pos
             sell_cap = pos_lim + pos
 
-            # Aggressive take when market crosses SMA fair
-            if best_ask < fair and buy_cap > 0:
-                take_qty = min(abs(od.sell_orders[best_ask]), buy_cap, quote_qty * 2)
-                result[sym].append(Order(sym, best_ask, take_qty))
-                buy_cap -= take_qty
-            if best_bid > fair and sell_cap > 0:
-                take_qty = min(od.buy_orders[best_bid], sell_cap, quote_qty * 2)
-                result[sym].append(Order(sym, best_bid, -take_qty))
-                sell_cap -= take_qty
-
-            # Passive make 1 tick around SMA fair
             if buy_cap > 0:
                 result[sym].append(Order(sym, fair_int - 1, min(quote_qty, buy_cap)))
             if sell_cap > 0:
