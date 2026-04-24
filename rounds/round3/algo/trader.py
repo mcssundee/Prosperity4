@@ -194,11 +194,9 @@ class Trader:
             best_ask = min(od.sell_orders)
             mid = (best_bid + best_ask) / 2.0
 
-            K = VOUCHER_STRIKES[sym]
-            win = 13 if K <= 4500 else (11 if K <= 5100 else 15)
             hist = mid_hist.get(sym, [])
             hist.append(mid)
-            if len(hist) > win:
+            if len(hist) > 11:
                 hist.pop(0)
             mid_hist[sym] = hist
             fair = sum(hist) / len(hist)
