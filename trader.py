@@ -133,14 +133,15 @@ VOUCHER_STRIKES = {
     'VEV_5400': 5400, 'VEV_5500': 5500,
     'VEV_6000': 6000, 'VEV_6500': 6500,
 }
-DEEP_ITM = {'VEV_4000', 'VEV_4500'}
 DEEP_OTM = {'VEV_6000', 'VEV_6500'}
-ACTIVE_STRIKES = {k for k in VOUCHER_STRIKES if k not in DEEP_ITM and k not in DEEP_OTM}
-
-IV_WINDOW = 50        # rolling IV history per strike
-SMILE_THRESH = 3.5    # price-tick deviation from smile fair value to trigger trade
-OPT_POS_LIM = 50      # per-strike position cap
-ITM_QUOTE = 5         # passive quote size for deep-ITM
+# Vouchers we market-make on; position cap and quote size per tier
+VOUCHER_MM = {
+    'VEV_4000': (300, 5), 'VEV_4500': (300, 5),
+    'VEV_5000': (200, 3), 'VEV_5100': (200, 3),
+    'VEV_5200': (100, 2), 'VEV_5300': (100, 2),
+    'VEV_5400': (50,  1), 'VEV_5500': (50,  1),
+}
+MID_HIST_WINDOW = 14    # rolling mid SMA for voucher fair value
 # TTE at round-3 day-0 start:
 #   - live submission: 5 days (no PROSPERITY4BT_DAY env var)
 #   - historical data: 8 - day_num (set by backtester env)
@@ -276,113 +277,38 @@ class Trader:
         return result, {"vev_bid_hist": bid_hist, "vev_ask_hist": ask_hist}
 
     # ------------------------------------------------------------------
-    # VEV Vouchers — deep-ITM MM + vol-smile IV scalping (near ATM only)
+    # VEV Vouchers — rolling-SMA passive market making on all tradeable strikes
     # ------------------------------------------------------------------
     def vev_options(self, state: TradingState, shared: dict):
         result = defaultdict(list)
-        opt = shared.get("opt_data", {})
+        mid_hist = shared.get("vev_opt_mid_hist", {})
 
-        # TTE: use backtester env variable if available, else assume live round-3 (TTE=5)
-        bt_day = os.environ.get("PROSPERITY4BT_DAY")
-        base_tte_days = (8.0 - int(bt_day)) if bt_day is not None else 5.0
-        tte_days = max(base_tte_days - state.timestamp / 1_000_000, 0.01)
-        tte_years = tte_days / 365.0
-
-        # Get VEV spot mid
-        spot = None
-        if 'VELVETFRUIT_EXTRACT' in state.order_depths:
-            od_s = state.order_depths['VELVETFRUIT_EXTRACT']
-            if od_s.buy_orders and od_s.sell_orders:
-                spot = (max(od_s.buy_orders) + min(od_s.sell_orders)) / 2.0
-
-        # ---- Deep ITM: passive market making on mid ----
-        itm_mid_hist = opt.get("itm_mid_hist", {})
-        for sym in DEEP_ITM:
-            if sym not in state.order_depths:
-                continue
-            od = state.order_depths[sym]
-            bids = sorted(od.buy_orders, reverse=True)
-            asks = sorted(od.sell_orders)
-            if not bids or not asks:
-                continue
-            mid = (bids[0] + asks[0]) / 2.0
-            hist = itm_mid_hist.get(sym, [])
-            hist.append(mid)
-            if len(hist) > 3:
-                hist.pop(0)
-            itm_mid_hist[sym] = hist
-            fair = sum(hist) / len(hist)
-            pos = state.position.get(sym, 0)
-            buy_cap = 300 - pos
-            sell_cap = 300 + pos
-            fair_int = round(fair)
-            if buy_cap > 0:
-                result[sym].append(Order(sym, fair_int - 1, min(ITM_QUOTE, buy_cap)))
-            if sell_cap > 0:
-                result[sym].append(Order(sym, fair_int + 1, -min(ITM_QUOTE, sell_cap)))
-        opt["itm_mid_hist"] = itm_mid_hist
-
-        if spot is None:
-            return result, {"opt_data": opt}
-
-        # ---- Active strikes: vol smile IV scalping, active take only ----
-        iv_hist = opt.get("iv_hist", {})
-        current_ivs = {}
-        moneynesses = {}
-
-        for sym in ACTIVE_STRIKES:
-            K = VOUCHER_STRIKES[sym]
+        for sym, (pos_lim, quote_qty) in VOUCHER_MM.items():
             if sym not in state.order_depths:
                 continue
             od = state.order_depths[sym]
             if not od.buy_orders or not od.sell_orders:
                 continue
-            mid = (max(od.buy_orders) + min(od.sell_orders)) / 2.0
-            iv = _implied_vol(spot, K, tte_years, mid)
-            if iv is None:
-                continue
-            current_ivs[sym] = iv
-            moneynesses[sym] = math.log(K / spot) / math.sqrt(tte_days)
-            hist = iv_hist.get(sym, [])
-            hist.append(iv)
-            if len(hist) > IV_WINDOW:
-                hist.pop(0)
-            iv_hist[sym] = hist
-        opt["iv_hist"] = iv_hist
-
-        # Need at least 3 warmed-up strikes to fit a reliable smile
-        ready_syms = [s for s in current_ivs if len(iv_hist.get(s, [])) >= 10]
-        if len(ready_syms) < 3:
-            return result, {"opt_data": opt}
-
-        xs = [moneynesses[s] for s in ready_syms]
-        ys = [current_ivs[s] for s in ready_syms]
-        smile_params = _fit_quadratic(xs, ys)
-        if smile_params is None:
-            mean_iv = sum(ys) / len(ys)
-            smile_params = (0.0, 0.0, mean_iv)
-        a, b, c = smile_params
-
-        for sym in ready_syms:
-            K = VOUCHER_STRIKES[sym]
-            m = moneynesses[sym]
-            smile_iv = max(a * m * m + b * m + c, 0.01)
-            fair_price = _bs_call(spot, K, tte_years, smile_iv)
-            od = state.order_depths[sym]
             best_bid = max(od.buy_orders)
             best_ask = min(od.sell_orders)
+            mid = (best_bid + best_ask) / 2.0
+
+            # Rolling SMA of mid price as fair value
+            hist = mid_hist.get(sym, [])
+            hist.append(mid)
+            if len(hist) > MID_HIST_WINDOW:
+                hist.pop(0)
+            mid_hist[sym] = hist
+            fair = sum(hist) / len(hist)
+            fair_int = round(fair)
+
             pos = state.position.get(sym, 0)
-            buy_cap = OPT_POS_LIM - pos
-            sell_cap = OPT_POS_LIM + pos
+            buy_cap = pos_lim - pos
+            sell_cap = pos_lim + pos
 
-            # Active take when option deviates significantly from smile fair price
-            if best_ask < fair_price - SMILE_THRESH and buy_cap > 0:
-                qty = min(buy_cap, abs(od.sell_orders[best_ask]))
-                if qty > 0:
-                    result[sym].append(Order(sym, best_ask, qty))
-            elif best_bid > fair_price + SMILE_THRESH and sell_cap > 0:
-                qty = min(sell_cap, od.buy_orders[best_bid])
-                if qty > 0:
-                    result[sym].append(Order(sym, best_bid, -qty))
+            if buy_cap > 0:
+                result[sym].append(Order(sym, fair_int - 1, min(quote_qty, buy_cap)))
+            if sell_cap > 0:
+                result[sym].append(Order(sym, fair_int + 1, -min(quote_qty, sell_cap)))
 
-        return result, {"opt_data": opt}
+        return result, {"vev_opt_mid_hist": mid_hist}

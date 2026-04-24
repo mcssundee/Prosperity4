@@ -141,7 +141,7 @@ VOUCHER_MM = {
     'VEV_5200': (100, 2), 'VEV_5300': (100, 2),
     'VEV_5400': (50,  1), 'VEV_5500': (50,  1),
 }
-MID_HIST_WINDOW = 3    # rolling mid SMA for voucher fair value
+MID_HIST_WINDOW = 11   # rolling mid SMA for voucher fair value
 # TTE at round-3 day-0 start:
 #   - live submission: 5 days (no PROSPERITY4BT_DAY env var)
 #   - historical data: 8 - day_num (set by backtester env)
