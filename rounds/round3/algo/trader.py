@@ -57,7 +57,7 @@ def _bs_call(S: float, K: float, T: float, sigma: float) -> float:
     return S * _norm_cdf(d1) - K * _norm_cdf(d2)
 
 
-def _implied_vol(S: float, K: float, T: float, price: float) -> float | None:
+def _implied_vol(S: float, K: float, T: float, price: float):
     """Bisection IV search; returns None if ill-conditioned."""
     if T <= 1e-9:
         return None
