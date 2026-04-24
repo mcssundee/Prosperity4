@@ -29,7 +29,7 @@ def run_backtest(round_num, round_spec=None, data_dir=None, vis=False, merge_pnl
     else:
         spec = f"{round_num}-{round_spec.lstrip('-')}"
 
-    cmd = ["python3", "-m", "prosperity4bt", "cli", str(trader_file), spec]
+    cmd = ["python3", "-m", "prosperity4bt", "cli", str(trader_file), spec, "--no-out"]
 
     if data_dir:
         data_path = Path(data_dir).absolute()

@@ -137,11 +137,11 @@ DEEP_OTM = {'VEV_6000', 'VEV_6500'}
 # Vouchers we market-make on; position cap and quote size per tier
 VOUCHER_MM = {
     'VEV_4000': (300, 5), 'VEV_4500': (300, 5),
-    'VEV_5000': (200, 3), 'VEV_5100': (200, 3),
+    'VEV_5000': (400, 3), 'VEV_5100': (400, 3),
     'VEV_5200': (100, 2), 'VEV_5300': (100, 2),
     'VEV_5400': (50,  1), 'VEV_5500': (50,  1),
 }
-MID_HIST_WINDOW = 14    # rolling mid SMA for voucher fair value
+MID_HIST_WINDOW = 11   # rolling mid SMA for voucher fair value
 # TTE at round-3 day-0 start:
 #   - live submission: 5 days (no PROSPERITY4BT_DAY env var)
 #   - historical data: 8 - day_num (set by backtester env)
