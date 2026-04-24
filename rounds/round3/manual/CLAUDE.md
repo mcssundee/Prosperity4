@@ -17,5 +17,5 @@ Submit 2 bids:
 - If bid 2 > reserve price but bid 2 < avg bid 2 → trade occurs but PnL penalised by:
   - Penalty factor: `((920 - avg_b2) / (920 - b2))^3`
 
-## Notes
-- Resubmit anytime; last submission counts when round ends
+
+Each counterparty is willing to trade with you at most once
