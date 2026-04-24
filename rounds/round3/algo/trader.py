@@ -138,8 +138,6 @@ DEEP_OTM = {'VEV_6000', 'VEV_6500'}
 ACTIVE_STRIKES = {k for k in VOUCHER_STRIKES if k not in DEEP_ITM and k not in DEEP_OTM}
 
 IV_WINDOW = 50        # rolling IV history per strike
-DIFF_WINDOW = 100     # rolling window for (BS_fair - market_mid) per strike
-DIFF_THRESH = 0.5     # deviation from rolling mean to trigger trade (price ticks)
 OPT_POS_LIM = 50      # per-strike position cap
 ITM_QUOTE = 5         # passive quote size for deep-ITM
 # TTE at round-3 day-0 start:
