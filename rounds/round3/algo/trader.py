@@ -278,7 +278,7 @@ class Trader:
         return result, {"vev_bid_hist": bid_hist, "vev_ask_hist": ask_hist}
 
     # ------------------------------------------------------------------
-    # VEV Vouchers — deep-ITM MM + per-strike rolling IV scalping
+    # VEV Vouchers — deep-ITM MM + vol-smile IV scalping (near ATM only)
     # ------------------------------------------------------------------
     def vev_options(self, state: TradingState, shared: dict):
         result = defaultdict(list)
@@ -324,91 +324,69 @@ class Trader:
                 result[sym].append(Order(sym, fair_int + 1, -min(ITM_QUOTE, sell_cap)))
         opt["itm_mid_hist"] = itm_mid_hist
 
-        # ---- Active strikes: per-strike rolling IV deviation scalping ----
         if spot is None:
             return result, {"opt_data": opt}
 
+        # ---- Near-ATM strikes: vol smile IV scalping ----
         iv_hist = opt.get("iv_hist", {})
+        current_ivs = {}
         moneynesses = {}
 
-        for sym in ACTIVE_STRIKES:
+        for sym in SMILE_STRIKES:
             K = VOUCHER_STRIKES[sym]
             if sym not in state.order_depths:
                 continue
             od = state.order_depths[sym]
             if not od.buy_orders or not od.sell_orders:
                 continue
-
-            best_bid = max(od.buy_orders)
-            best_ask = min(od.sell_orders)
-            mid = (best_bid + best_ask) / 2.0
-
+            mid = (max(od.buy_orders) + min(od.sell_orders)) / 2.0
             iv = _implied_vol(spot, K, tte_years, mid)
             if iv is None:
                 continue
-
+            current_ivs[sym] = iv
             moneynesses[sym] = math.log(K / spot) / math.sqrt(tte_days)
-
-            # Update per-strike rolling IV history
             hist = iv_hist.get(sym, [])
             hist.append(iv)
             if len(hist) > IV_WINDOW:
                 hist.pop(0)
             iv_hist[sym] = hist
-
-            if len(hist) < 10:
-                continue  # still warming up
-
-            mean_iv = sum(hist) / len(hist)
-            iv_dev = iv - mean_iv  # positive = option overpriced, sell; negative = cheap, buy
-
-            pos = state.position.get(sym, 0)
-            buy_cap = OPT_POS_LIM - pos
-            sell_cap = OPT_POS_LIM + pos
-
-            # Trade when current IV deviates significantly from its rolling mean
-            if iv_dev < -IV_ENTRY_THR and buy_cap > 0:
-                # Option IV below mean → option cheap → BUY at best ask
-                qty = min(buy_cap, abs(od.sell_orders[best_ask]))
-                if qty > 0:
-                    result[sym].append(Order(sym, best_ask, qty))
-            elif iv_dev > IV_ENTRY_THR and sell_cap > 0:
-                # Option IV above mean → option expensive → SELL at best bid
-                qty = min(sell_cap, od.buy_orders[best_bid])
-                if qty > 0:
-                    result[sym].append(Order(sym, best_bid, -qty))
-
         opt["iv_hist"] = iv_hist
 
-        # ---- Vol smile cross-check: also trade cross-strike deviations ----
-        # Fit smile to all active strikes with warmed-up histories
-        ready_syms = [s for s in moneynesses if len(iv_hist.get(s, [])) >= 10]
-        if len(ready_syms) >= 3:
-            xs = [moneynesses[s] for s in ready_syms]
-            ys = [iv_hist[s][-1] for s in ready_syms]  # current IV per strike
-            smile_params = _fit_quadratic(xs, ys)
-            if smile_params is not None:
-                a, b, c = smile_params
-                for sym in ready_syms:
-                    K = VOUCHER_STRIKES[sym]
-                    m = moneynesses[sym]
-                    smile_iv = max(a * m * m + b * m + c, 0.01)
-                    fair_price = _bs_call(spot, K, tte_years, smile_iv)
-                    curr_iv = iv_hist[sym][-1]
-                    od = state.order_depths[sym]
-                    best_bid = max(od.buy_orders)
-                    best_ask = min(od.sell_orders)
-                    pos = state.position.get(sym, 0)
-                    buy_cap = OPT_POS_LIM - pos
-                    sell_cap = OPT_POS_LIM + pos
-                    # Only take cross-strike opportunities not already taken by per-strike signal
-                    if curr_iv - smile_iv > IV_ENTRY_THR * 2 and sell_cap > 0:
-                        qty = min(sell_cap, od.buy_orders[best_bid])
-                        if qty > 0:
-                            result[sym].append(Order(sym, best_bid, -qty))
-                    elif smile_iv - curr_iv > IV_ENTRY_THR * 2 and buy_cap > 0:
-                        qty = min(buy_cap, abs(od.sell_orders[best_ask]))
-                        if qty > 0:
-                            result[sym].append(Order(sym, best_ask, qty))
+        # Need at least 3 warmed-up strikes to fit smile
+        ready_syms = [s for s in current_ivs if len(iv_hist.get(s, [])) >= 10]
+        if len(ready_syms) < 3:
+            return result, {"opt_data": opt}
+
+        xs = [moneynesses[s] for s in ready_syms]
+        ys = [current_ivs[s] for s in ready_syms]
+        smile_params = _fit_quadratic(xs, ys)
+        if smile_params is None:
+            mean_iv = sum(ys) / len(ys)
+            smile_params = (0.0, 0.0, mean_iv)
+        a, b, c = smile_params
+
+        for sym in ready_syms:
+            K = VOUCHER_STRIKES[sym]
+            m = moneynesses[sym]
+            smile_iv = max(a * m * m + b * m + c, 0.01)
+            fair_price = _bs_call(spot, K, tte_years, smile_iv)
+            od = state.order_depths[sym]
+            best_bid = max(od.buy_orders)
+            best_ask = min(od.sell_orders)
+            pos = state.position.get(sym, 0)
+
+            # Active take only — no passive making to avoid adverse selection
+            if best_ask < fair_price - SMILE_THRESH:
+                buy_cap = OPT_POS_LIM - pos
+                if buy_cap > 0:
+                    qty = min(buy_cap, abs(od.sell_orders[best_ask]))
+                    if qty > 0:
+                        result[sym].append(Order(sym, best_ask, qty))
+            elif best_bid > fair_price + SMILE_THRESH:
+                sell_cap = OPT_POS_LIM + pos
+                if sell_cap > 0:
+                    qty = min(sell_cap, od.buy_orders[best_bid])
+                    if qty > 0:
+                        result[sym].append(Order(sym, best_bid, -qty))
 
         return result, {"opt_data": opt}
