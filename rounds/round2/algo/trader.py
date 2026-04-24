@@ -1,4 +1,4 @@
-from utils.datamodel import TradingState, Order
+from datamodel import TradingState, Order
 from typing import List
 import json
 from collections import defaultdict

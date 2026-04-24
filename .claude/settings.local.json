@@ -24,7 +24,9 @@
       "Bash(awk '{sum[$1]+=$2; cnt[$1]++; if\\(min[$1]==\"\" || $2+0<min[$1]+0\\) min[$1]=$2; if\\(max[$1]==\"\" || $2+0>max[$1]+0\\) max[$1]=$2} END {for\\(p in sum\\) printf \"%s: avg=%.1f min=%s max=%s n=%d\\\\n\", p, sum[p]/cnt[p], min[p], max[p], cnt[p]}')",
       "Bash(awk -F';' 'NR>1 && $15!=\"\" {print $3, $15}' /Users/Guan/Prosperity4/data/raw/round2/prices_round_2_day_0.csv)",
       "Bash(awk -F';' 'NR>1 && $15!=\"\" {print $3, $15}' /Users/Guan/Prosperity4/data/raw/round2/prices_round_2_day_1.csv)",
-      "Bash(awk *)"
+      "Bash(awk *)",
+      "Bash(cp rounds/round2/algo/trader.py /tmp/trader_baseline.py)",
+      "Bash(cp rounds/round2/algo/trader_v2_bollinger.py rounds/round2/algo/trader.py)"
     ]
   }
 }
