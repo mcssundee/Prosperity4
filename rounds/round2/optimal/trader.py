@@ -1,4 +1,5 @@
 from datamodel import TradingState, Order
+from typing import Optional
 import json
 from collections import defaultdict
 
