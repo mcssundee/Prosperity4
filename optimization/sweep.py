@@ -5,6 +5,8 @@ import subprocess
 import json
 import os
 import re
+import shutil
+import glob
 from pathlib import Path
 from collections import defaultdict
 
@@ -14,16 +16,29 @@ BASELINE_PNL = 298198
 
 def run_backtest(params):
     """Run backtest with given parameters, return cumulative PnL."""
+    import shutil
+    import glob
+
+    # CRITICAL: Clear bytecode cache before running backtest
+    # This prevents Python from using cached .pyc files from previous runs
+    cache_dirs = glob.glob(str(PROJECT_ROOT / "**/__pycache__"), recursive=True)
+    for cache_dir in cache_dirs:
+        try:
+            shutil.rmtree(cache_dir)
+        except:
+            pass
+
     trader_code = generate_trader(params)
     TRADER_FILE.write_text(trader_code)
 
     try:
         result = subprocess.run(
-            ["python3", "backtesting/backtester.py", "--round", "2", "--merge-pnl"],
+            ["python3", "-B", "backtesting/backtester.py", "--round", "2", "--merge-pnl"],
             cwd=PROJECT_ROOT,
             capture_output=True,
             text=True,
-            timeout=120
+            timeout=120,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
         )
 
         pnl = None
