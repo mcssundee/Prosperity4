@@ -1,6 +1,6 @@
 {
   "enabledMcpjsonServers": ["github"],
-  "model": "haiku",
+  "model": "claude-sonnet-4-6",
   "effortLevel": "medium",
   "permissions": {
     "defaultMode": "auto",
