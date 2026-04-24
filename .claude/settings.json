@@ -15,7 +15,8 @@
       "Edit(strategies/**)",
       "Write(rounds/**)",
       "Write(strategies/**)",
-      "Write(trader.py)"
+      "Write(trader.py)",
+      "NotebookEdit(rounds/**)"
     ],
     "deny": [
       "Bash(rm -rf *)",
