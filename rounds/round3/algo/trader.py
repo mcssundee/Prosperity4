@@ -78,7 +78,7 @@ def _implied_vol(S: float, K: float, T: float, price: float):
     return (lo + hi) / 2.0
 
 
-def _solve3x3(A: list, b: list) -> list | None:
+def _solve3x3(A: list, b: list):
     """Gaussian elimination for 3×3 system Ax=b. Returns x or None."""
     import copy
     M = [A[i][:] + [b[i]] for i in range(3)]
