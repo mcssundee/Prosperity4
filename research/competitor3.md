@@ -1,7 +1,7 @@
 # Competitor 3 Write-up
 
-**Source**: [paste GitHub link here]
-**Finish**: [rank if known]
+https://github.com/CarterT27/imc-prosperity-3: [paste GitHub link here]
+9: [rank if known]
 **Team/Author**: [name or handle]
 
 ## Notes
