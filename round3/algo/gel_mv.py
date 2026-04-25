@@ -12,27 +12,31 @@ HYDRO_MAX_SPREAD = 20
 # alpha=0.001 → ~693-tick halflife (~70 seconds).
 HYDRO_MU_ALPHA  = 0.001
 HYDRO_VAR_ALPHA = 0.001
-HYDRO_BB_K      = 1.25   # entry threshold in standard deviations
+HYDRO_BB_K      = 1.5    # entry threshold in standard deviations
 HYDRO_VAR_INIT  = 25.0   # initial variance (σ=5 ticks); converges to true vol
+
+# --- Trend filter (EMA crossover) ---
+# Blocks taker from buying into downtrends / selling into uptrends.
+# fast α=0.01 (~69-tick), slow α=0.001 (~693-tick).
+HYDRO_FAST_ALPHA   = 0.01
+HYDRO_SLOW_ALPHA   = 0.001
+HYDRO_TREND_THRESH = 5.0
 
 # --- RSI ---
 # Confirmation filter: only take a trade when RSI agrees with the BB signal.
-# alpha=0.005 → ~138-tick halflife; thresholds 40/60 (inside traditional 30/70
-# to account for tick-level data being noisier than daily bars).
 HYDRO_RSI_ALPHA = 0.005
-HYDRO_RSI_LOW   = 47     # below this = oversold → confirms buy
-HYDRO_RSI_HIGH  = 53     # above this = overbought → confirms sell
+HYDRO_RSI_LOW   = 45     # below this = oversold → confirms buy
+HYDRO_RSI_HIGH  = 55     # above this = overbought → confirms sell
 
 # --- ATR ---
-# EMA of |microprice change per tick| — captures short-term realized volatility.
-# Used to scale position size: trade smaller when the market is moving fast.
+# EMA of |microprice change per tick| — scales position size.
+# MAX_MULT capped at 1.0: ATR can shrink positions in high vol but never inflate them.
 HYDRO_ATR_ALPHA    = 0.01
-HYDRO_ATR_BASELINE = 5.0   # expected ATR in ticks for a calm market
-HYDRO_ATR_MIN      = 0.5   # floor to prevent division-by-zero / oversizing
-HYDRO_ATR_MAX_MULT = 2.0   # cap upside scaling to 2× base target
+HYDRO_ATR_BASELINE = 2.0   # calibrated to actual observed ATR (~1.75–2.9 ticks)
+HYDRO_ATR_MIN      = 0.5
+HYDRO_ATR_MAX_MULT = 1.0   # no upside scaling — only shrink in high vol
 
-# Base position target at z=2 with ATR=ATR_BASELINE.
-# At z=2 and normal vol: target ≈ 55 units (matches original strategy tiers).
+# Base position target at z=BB_K and normal ATR.
 HYDRO_BASE_TARGET = 55
 
 HYDRO_MAKER_SIZE    = 12
