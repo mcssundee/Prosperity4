@@ -64,5 +64,5 @@ if __name__ == "__main__":
     parser.add_argument("--print", action="store_true", help="Print trader's stdout during backtest")
     args = parser.parse_args()
 
-    exit_code = run_backtest(args.round, round_spec=args.day, data_dir=args.data, vis=args.vis, merge_pnl=args.merge_pnl, print_output=args.print)
+    exit_code = run_backtest(args.round, round_spec=args.day, data_dir=args.data, vis=args.vis, merge_pnl=args.merge_pnl, print_output=args.print, trader=args.trader)
     sys.exit(exit_code)
