@@ -12,8 +12,9 @@ HYDRO_MAX_SPREAD = 20
 # alpha=0.001 → ~693-tick halflife (~70 seconds).
 HYDRO_MU_ALPHA  = 0.001
 HYDRO_VAR_ALPHA = 0.001
-HYDRO_BB_K      = 1.25   # entry threshold in standard deviations
+HYDRO_BB_K      = 2.0    # entry threshold in standard deviations
 HYDRO_VAR_INIT  = 25.0   # initial variance (σ=5 ticks); converges to true vol
+HYDRO_WARMUP    = 500    # ticks before taker fires — lets EMAs calibrate
 
 # --- Trend filter (EMA crossover) ---
 # Blocks taker from buying into downtrends / selling into uptrends.
