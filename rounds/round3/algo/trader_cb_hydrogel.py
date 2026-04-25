@@ -127,14 +127,19 @@ class Trader:
                         orders.append(Order(product, int(best_bid), -qty))
                     break
 
-        if not orders and HYDRO_NEUTRAL_FLATTEN:
-            if pos > HYDRO_FLATTEN_TRIGGER:
-                qty = min(HYDRO_STEP_SIZE, pos, sell_room)
-                if qty > 0:
-                    orders.append(Order(product, int(best_bid), -qty))
-            elif pos < -HYDRO_FLATTEN_TRIGGER:
-                qty = min(HYDRO_STEP_SIZE, -pos, buy_room)
-                if qty > 0:
-                    orders.append(Order(product, int(best_ask), qty))
+        # Maker: passive quotes in the neutral zone when no taker order was placed.
+        # Only quote the side that reduces inventory once position is skewed.
+        if not orders and spread >= 4:
+            quote_bid = best_bid + 1
+            quote_ask = best_ask - 1
+            if quote_bid < quote_ask:  # still a valid spread after tightening
+                if pos <= HYDRO_MAKER_SKEW:
+                    qty = min(HYDRO_MAKER_SIZE, buy_room)
+                    if qty > 0:
+                        orders.append(Order(product, quote_bid, qty))
+                if pos >= -HYDRO_MAKER_SKEW:
+                    qty = min(HYDRO_MAKER_SIZE, sell_room)
+                    if qty > 0:
+                        orders.append(Order(product, quote_ask, -qty))
 
         return orders
