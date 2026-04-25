@@ -5,9 +5,21 @@ from typing import List
 HYDRO_POS_LIM    = 200
 HYDRO_STEP_SIZE  = 20
 HYDRO_MAX_SPREAD = 20
-HYDRO_FAIR_ALPHA = 0.001  # slow EMA — ~693-tick halflife (~70s)
-HYDRO_MIN_DEV    = 20.0   # minimum deviation (ticks) before taker fires
-HYDRO_POS_SCALE  = 0.92   # units per tick of deviation; 60 ticks → ~55 units
+
+# Fair value: slow EMA of microprice (~693-tick halflife)
+HYDRO_FAIR_ALPHA = 0.001
+
+# Trend filter: fast vs slow EMA crossover
+# fast alpha=0.01 (~69-tick), slow alpha=0.001 (~693-tick)
+# A gap > HYDRO_TREND_THRESH ticks means the market is trending
+HYDRO_FAST_ALPHA   = 0.01
+HYDRO_SLOW_ALPHA   = 0.001
+HYDRO_TREND_THRESH = 5.0
+
+# Taker only fires when price is this many ticks from fair value
+HYDRO_MIN_DEV   = 20.0
+# Position units per tick of deviation; 60 ticks → ~55 units
+HYDRO_POS_SCALE = 0.92
 
 HYDRO_MAKER_SIZE    = 12
 HYDRO_MAKER_MAX_POS = 15
@@ -85,23 +97,35 @@ class Trader:
         buy_room  = HYDRO_POS_LIM - pos
         sell_room = HYDRO_POS_LIM + pos
 
+        # Update all three EMAs
         fair = saved.get("hydro_fair", microprice)
+        fast = saved.get("hydro_fast", microprice)
+        slow = saved.get("hydro_slow", microprice)
         fair = HYDRO_FAIR_ALPHA * microprice + (1 - HYDRO_FAIR_ALPHA) * fair
+        fast = HYDRO_FAST_ALPHA * microprice + (1 - HYDRO_FAST_ALPHA) * fast
+        slow = HYDRO_SLOW_ALPHA * microprice + (1 - HYDRO_SLOW_ALPHA) * slow
         saved["hydro_fair"] = fair
+        saved["hydro_fast"] = fast
+        saved["hydro_slow"] = slow
 
-        deviation = fair - microprice
+        deviation   = fair - microprice       # positive = price below fair = buy signal
+        trend_gap   = fast - slow             # positive = uptrend, negative = downtrend
+        trending_up   = trend_gap >  HYDRO_TREND_THRESH
+        trending_down = trend_gap < -HYDRO_TREND_THRESH
+
         orders: List[Order] = []
 
-        # Taker: fade moves away from fair value once deviation is large enough.
+        # Taker: fade moves away from fair, but only when price has moved
+        # meaningfully AND the market isn't already trending that way.
         if abs(deviation) >= HYDRO_MIN_DEV:
             raw_target = deviation * HYDRO_POS_SCALE
             target = int(max(-HYDRO_POS_LIM, min(HYDRO_POS_LIM, raw_target)))
             delta = max(-HYDRO_STEP_SIZE, min(HYDRO_STEP_SIZE, target - pos))
-            if delta > 0:
+            if delta > 0 and not trending_down:
                 qty = min(delta, buy_room)
                 if qty > 0:
                     orders.append(Order(product, best_ask, qty))
-            elif delta < 0:
+            elif delta < 0 and not trending_up:
                 qty = min(-delta, sell_room)
                 if qty > 0:
                     orders.append(Order(product, best_bid, -qty))
