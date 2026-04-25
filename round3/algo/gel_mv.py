@@ -167,7 +167,7 @@ class Trader:
         # ATR only shrinks position in high vol; never inflates it (MAX_MULT=1.0).
         vol_scale  = min(HYDRO_ATR_BASELINE / max(atr, HYDRO_ATR_MIN), HYDRO_ATR_MAX_MULT)
         raw_target = (z / HYDRO_BB_K) * HYDRO_BASE_TARGET * vol_scale
-        target     = int(max(-HYDRO_POS_LIM, min(HYDRO_POS_LIM, raw_target)))
+        target     = int(max(-HYDRO_TAKER_MAX, min(HYDRO_TAKER_MAX, raw_target)))
         delta      = max(-HYDRO_STEP_SIZE, min(HYDRO_STEP_SIZE, target - pos))
 
         # --- Taker ---
