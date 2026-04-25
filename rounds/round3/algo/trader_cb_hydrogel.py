@@ -122,8 +122,8 @@ class Trader:
 
         for offset, target in HYDRO_BUY_OFFSETS:
             if mid < ema + offset:
-                # microprice confirmation: book leans down too (not just noise)
-                if microprice <= mid:
+                # microprice confirmation: book leans up (price about to recover)
+                if microprice >= mid:
                     qty = min(HYDRO_STEP_SIZE, target - pos, buy_room)
                     if qty > 0:
                         orders.append(Order(product, int(best_ask), qty))
