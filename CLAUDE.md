@@ -6,8 +6,6 @@
 - Never modify `data/raw/` — derive separate files instead
 - All logic in classes; `Trader.run()` is entry point
 
-## Submission
-Develop in `rounds/roundX/algo/trader.py` → copy to `trader.py` → `git tag roundX-submission`
 
 ## Git Workflow
 - `main` = submissions only; `dev` = active development

@@ -129,10 +129,14 @@ class Trader:
             return orders
 
         # Continuous position target: linear in deviation, clamped to limits.
-        raw_target = deviation * HYDRO_POS_SCALE
-        target_pos = int(max(-HYDRO_POS_LIM, min(HYDRO_POS_LIM, raw_target)))
-        delta = target_pos - pos
-        delta = max(-HYDRO_STEP_SIZE, min(HYDRO_STEP_SIZE, delta))
+        # Gate on minimum deviation so sub-threshold noise never triggers a taker order.
+        if abs(deviation) < HYDRO_MIN_DEV:
+            delta = 0
+        else:
+            raw_target = deviation * HYDRO_POS_SCALE
+            target_pos = int(max(-HYDRO_POS_LIM, min(HYDRO_POS_LIM, raw_target)))
+            delta = target_pos - pos
+            delta = max(-HYDRO_STEP_SIZE, min(HYDRO_STEP_SIZE, delta))
 
         # Trend filter: only take mean-reversion trades when not in a trend.
         # Lets existing positions ride; only blocks new entries.
