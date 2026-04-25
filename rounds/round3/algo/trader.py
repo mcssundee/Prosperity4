@@ -36,21 +36,113 @@ class Logger:
 
 logger = Logger()
 
+# ------------------------------------------------------------------
+# Black-Scholes helpers (pure stdlib, no scipy)
+# ------------------------------------------------------------------
 
+def _norm_cdf(x: float) -> float:
+    return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
+
+
+def _bs_call(S: float, K: float, T: float, sigma: float) -> float:
+    """European call price (r=0). T in years, sigma annualised."""
+    if T <= 1e-9:
+        return max(S - K, 0.0)
+    if sigma <= 1e-9:
+        return max(S - K, 0.0)
+    sqrtT = math.sqrt(T)
+    d1 = (math.log(S / K) + 0.5 * sigma * sigma * T) / (sigma * sqrtT)
+    d2 = d1 - sigma * sqrtT
+    return S * _norm_cdf(d1) - K * _norm_cdf(d2)
+
+
+def _implied_vol(S: float, K: float, T: float, price: float):
+    """Bisection IV search; returns None if ill-conditioned."""
+    if T <= 1e-9:
+        return None
+    intrinsic = max(S - K, 0.0)
+    if price <= intrinsic + 1e-9:
+        return None
+    lo, hi = 1e-6, 5.0
+    if _bs_call(S, K, T, hi) < price:
+        return None
+    for _ in range(200):
+        mid = (lo + hi) / 2.0
+        if _bs_call(S, K, T, mid) > price:
+            hi = mid
+        else:
+            lo = mid
+        if hi - lo < 1e-7:
+            break
+    return (lo + hi) / 2.0
+
+
+def _solve3x3(A: list, b: list):
+    """Gaussian elimination for 3×3 system Ax=b. Returns x or None."""
+    import copy
+    M = [A[i][:] + [b[i]] for i in range(3)]
+    for col in range(3):
+        pivot = max(range(col, 3), key=lambda r: abs(M[r][col]))
+        M[col], M[pivot] = M[pivot], M[col]
+        if abs(M[col][col]) < 1e-15:
+            return None
+        for row in range(col + 1, 3):
+            f = M[row][col] / M[col][col]
+            for j in range(col, 4):
+                M[row][j] -= f * M[col][j]
+    x = [0.0] * 3
+    for i in range(2, -1, -1):
+        x[i] = M[i][3]
+        for j in range(i + 1, 3):
+            x[i] -= M[i][j] * x[j]
+        x[i] /= M[i][i]
+    return x
+
+
+def _fit_quadratic(xs: list, ys: list):
+    """Least-squares quadratic fit y = a*x^2 + b*x + c.
+    Returns (a, b, c) or None if not enough data."""
+    n = len(xs)
+    if n < 3:
+        return None
+    s4 = s3 = s2 = s1 = s0 = sy2 = sy1 = sy0 = 0.0
+    for x, y in zip(xs, ys):
+        x2 = x * x
+        s4 += x2 * x2
+        s3 += x2 * x
+        s2 += x2
+        s1 += x
+        s0 += 1.0
+        sy2 += x2 * y
+        sy1 += x * y
+        sy0 += y
+    A = [[s4, s3, s2], [s3, s2, s1], [s2, s1, s0]]
+    b = [sy2, sy1, sy0]
+    return _solve3x3(A, b)
+
+
+# ------------------------------------------------------------------
+# Voucher configuration
+# ------------------------------------------------------------------
 VOUCHER_STRIKES = {
     'VEV_4000': 4000, 'VEV_4500': 4500,
     'VEV_5000': 5000, 'VEV_5100': 5100,
     'VEV_5200': 5200, 'VEV_5300': 5300,
     'VEV_5400': 5400, 'VEV_5500': 5500,
+    'VEV_6000': 6000, 'VEV_6500': 6500,
 }
-
-# (position_limit, passive_quote_qty)
+DEEP_OTM = {'VEV_6000', 'VEV_6500'}
+# Vouchers we market-make on; position cap and quote size per tier
 VOUCHER_MM = {
     'VEV_4000': (300, 5), 'VEV_4500': (300, 5),
     'VEV_5000': (200, 3), 'VEV_5100': (200, 3),
     'VEV_5200': (100, 2), 'VEV_5300': (100, 2),
     'VEV_5400': (50,  1), 'VEV_5500': (50,  1),
 }
+MID_HIST_WINDOW = 11   # rolling mid SMA for voucher fair value
+# TTE at round-3 day-0 start:
+#   - live submission: 5 days (no PROSPERITY4BT_DAY env var)
+#   - historical data: 8 - day_num (set by backtester env)
 
 
 class Trader:
@@ -61,7 +153,7 @@ class Trader:
         if state.traderData:
             try:
                 shared = json.loads(state.traderData)
-            except Exception:
+            except json.JSONDecodeError:
                 pass
 
         result['HYDROGEL_PACK'], hp_data = self.hydrogel(state, shared)
@@ -75,13 +167,13 @@ class Trader:
         return result, conversions, traderData
 
     # ------------------------------------------------------------------
-    # HYDROGEL_PACK — mean-reversion MM around fixed fair = 10000
+    # HYDROGEL_PACK — mean-reversion MM around 10000
     # ------------------------------------------------------------------
     def hydrogel(self, state: TradingState, shared: dict):
         product = 'HYDROGEL_PACK'
         result = []
         pos_lim = 200
-        quote_lim = 20
+        quote_lim = 15
         fair = 10000
 
         if product not in state.order_depths:
@@ -91,9 +183,11 @@ class Trader:
         pos = state.position.get(product, 0)
         bids = sorted(od.buy_orders, reverse=True)
         asks = sorted(od.sell_orders)
+
         buy_cap = pos_lim - pos
         sell_cap = pos_lim + pos
 
+        # Active take
         for ask in asks:
             if ask < fair and buy_cap > 0:
                 qty = min(buy_cap, abs(od.sell_orders[ask]))
@@ -105,6 +199,7 @@ class Trader:
                 result.append(Order(product, bid, -qty))
                 sell_cap -= qty
 
+        # Passive make
         if buy_cap > 0:
             result.append(Order(product, fair - 1, min(quote_lim, buy_cap)))
         if sell_cap > 0:
@@ -113,7 +208,7 @@ class Trader:
         return result, {}
 
     # ------------------------------------------------------------------
-    # VELVETFRUIT_EXTRACT — SMA-5 mid-price market maker
+    # VELVETFRUIT_EXTRACT — SMA-5 market maker
     # ------------------------------------------------------------------
     def vev_spot(self, state: TradingState, shared: dict):
         product = 'VELVETFRUIT_EXTRACT'
@@ -151,6 +246,7 @@ class Trader:
         buy_cap = pos_lim - pos
         sell_cap = pos_lim + pos
 
+        # Active take
         for ask in asks:
             if ask <= fair - 1 and buy_cap > 0:
                 qty = min(buy_cap, abs(od.sell_orders[ask]))
@@ -164,6 +260,7 @@ class Trader:
                 sell_cap -= qty
                 break
 
+        # Passive make
         pb = next((p for p in bids if p + 1 <= fair), None)
         pa = next((p for p in asks if p - 1 >= fair), None)
         if pb is None and best_bid is not None and best_bid + 1 <= fair:
@@ -178,7 +275,7 @@ class Trader:
         return result, {"vev_bid_hist": bid_hist, "vev_ask_hist": ask_hist}
 
     # ------------------------------------------------------------------
-    # VEV Vouchers — SMA fair value, passive make only
+    # VEV Vouchers — rolling-SMA passive market making on all tradeable strikes
     # ------------------------------------------------------------------
     def vev_options(self, state: TradingState, shared: dict):
         result = defaultdict(list)
@@ -194,9 +291,10 @@ class Trader:
             best_ask = min(od.sell_orders)
             mid = (best_bid + best_ask) / 2.0
 
+            # Rolling SMA of mid price as fair value
             hist = mid_hist.get(sym, [])
             hist.append(mid)
-            if len(hist) > 11:
+            if len(hist) > MID_HIST_WINDOW:
                 hist.pop(0)
             mid_hist[sym] = hist
             fair = sum(hist) / len(hist)
