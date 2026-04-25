@@ -9,18 +9,18 @@ HYDRO_FAIR_INIT  = 10000.0
 
 # Buy tiers: (mid_below_threshold, target_long_position)
 HYDRO_BUY_TIERS = [
-    (9925, 70),
-    (9930, 60),
-    (9935, 50),
-    (9940, 40),
+    (9925, 100),
+    (9930, 85),
+    (9935, 70),
+    (9940, 55),
 ]
 
 # Sell tiers: (mid_above_threshold, target_short_position)
 HYDRO_SELL_TIERS = [
-    (10040, 70),
-    (10035, 60),
-    (10030, 50),
-    (10025, 40),
+    (10040, 100),
+    (10035, 85),
+    (10030, 70),
+    (10025, 55),
 ]
 
 HYDRO_NEUTRAL_FLATTEN = False
