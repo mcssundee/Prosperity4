@@ -120,13 +120,19 @@ class Trader:
         # --- Bollinger Bands ---
         mu  = saved.get("hydro_mu",  microprice)
         var = saved.get("hydro_var", HYDRO_VAR_INIT)
-        mu  = HYDRO_MU_ALPHA  * microprice        + (1 - HYDRO_MU_ALPHA)  * mu
+        mu  = HYDRO_MU_ALPHA  * microprice             + (1 - HYDRO_MU_ALPHA)  * mu
         var = HYDRO_VAR_ALPHA * (microprice - mu) ** 2 + (1 - HYDRO_VAR_ALPHA) * var
         sigma = math.sqrt(var) if var > 0 else 1.0
+        z = (mu - microprice) / sigma  # positive = price below mean = buy signal
 
-        # Z-score: how many standard deviations is price below/above the mean.
-        # Positive z → price below mean → buy signal.
-        z = (mu - microprice) / sigma
+        # --- Trend filter (EMA crossover) ---
+        fast = saved.get("hydro_fast", microprice)
+        slow = saved.get("hydro_slow", microprice)
+        fast = HYDRO_FAST_ALPHA * microprice + (1 - HYDRO_FAST_ALPHA) * fast
+        slow = HYDRO_SLOW_ALPHA * microprice + (1 - HYDRO_SLOW_ALPHA) * slow
+        trend_gap     = fast - slow
+        trending_up   = trend_gap >  HYDRO_TREND_THRESH
+        trending_down = trend_gap < -HYDRO_TREND_THRESH
 
         # --- RSI ---
         avg_gain = saved.get("hydro_gain", 0.5)
@@ -149,28 +155,28 @@ class Trader:
         saved["hydro_prev"] = microprice
         saved["hydro_mu"]   = mu
         saved["hydro_var"]  = var
+        saved["hydro_fast"] = fast
+        saved["hydro_slow"] = slow
         saved["hydro_gain"] = avg_gain
         saved["hydro_loss"] = avg_loss
         saved["hydro_atr"]  = atr
 
         # --- Position target ---
-        # Scale by z-score (how far outside the bands) and inverse ATR
-        # (shrink size when the market is moving fast).
+        # ATR only shrinks position in high vol; never inflates it (MAX_MULT=1.0).
         vol_scale  = min(HYDRO_ATR_BASELINE / max(atr, HYDRO_ATR_MIN), HYDRO_ATR_MAX_MULT)
         raw_target = (z / HYDRO_BB_K) * HYDRO_BASE_TARGET * vol_scale
         target     = int(max(-HYDRO_POS_LIM, min(HYDRO_POS_LIM, raw_target)))
         delta      = max(-HYDRO_STEP_SIZE, min(HYDRO_STEP_SIZE, target - pos))
 
         # --- Taker ---
-        # Fire only when price is outside the Bollinger Bands (|z| >= BB_K)
-        # and RSI confirms the mean-reversion direction.
+        # Three-way gate: BB signal + RSI confirmation + trend filter.
         orders: List[Order] = []
         if abs(z) >= HYDRO_BB_K:
-            if delta > 0 and rsi < HYDRO_RSI_LOW:       # oversold: buy
+            if delta > 0 and rsi < HYDRO_RSI_LOW and not trending_down:
                 qty = min(delta, buy_room)
                 if qty > 0:
                     orders.append(Order(product, best_ask, qty))
-            elif delta < 0 and rsi > HYDRO_RSI_HIGH:    # overbought: sell
+            elif delta < 0 and rsi > HYDRO_RSI_HIGH and not trending_up:
                 qty = min(-delta, sell_room)
                 if qty > 0:
                     orders.append(Order(product, best_bid, -qty))
