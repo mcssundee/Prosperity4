@@ -127,19 +127,16 @@ class Trader:
                         orders.append(Order(product, int(best_bid), -qty))
                     break
 
-        # Maker: passive quotes in the neutral zone when no taker order was placed.
-        # Only quote the side that reduces inventory once position is skewed.
-        if not orders and spread >= 4:
+        # Maker: passive quotes only when position is near flat.
+        # Shuts off entirely once taker has built a position — avoids
+        # prematurely covering taker positions during directional moves.
+        if not orders and spread >= 4 and abs(pos) <= HYDRO_MAKER_MAX_POS:
             quote_bid = best_bid + 1
             quote_ask = best_ask - 1
-            if quote_bid < quote_ask:  # still a valid spread after tightening
-                if pos <= HYDRO_MAKER_SKEW:
-                    qty = min(HYDRO_MAKER_SIZE, buy_room)
-                    if qty > 0:
-                        orders.append(Order(product, quote_bid, qty))
-                if pos >= -HYDRO_MAKER_SKEW:
-                    qty = min(HYDRO_MAKER_SIZE, sell_room)
-                    if qty > 0:
-                        orders.append(Order(product, quote_ask, -qty))
+            if quote_bid < quote_ask:
+                if buy_room > 0:
+                    orders.append(Order(product, quote_bid, min(HYDRO_MAKER_SIZE, buy_room)))
+                if sell_room > 0:
+                    orders.append(Order(product, quote_ask, -min(HYDRO_MAKER_SIZE, sell_room)))
 
         return orders
