@@ -97,41 +97,33 @@ class Trader:
         bid_vol = od.buy_orders[best_bid]
         ask_vol = abs(od.sell_orders[best_ask])
         total_vol = bid_vol + ask_vol
-        if total_vol > 0:
-            microprice = (best_bid * ask_vol + best_ask * bid_vol) / total_vol
-        else:
-            microprice = (best_bid + best_ask) / 2.0
+        microprice = (best_bid * ask_vol + best_ask * bid_vol) / total_vol if total_vol > 0 else (best_bid + best_ask) / 2.0
 
         mid = (best_bid + best_ask) / 2.0
-        ema = HYDRO_FAIR_INIT  # static anchor — critical for mean-reversion logic
         pos = state.position.get(product, 0)
 
-        # Emergency unwind: price escaped far from fair value
-        if mid < ema - 180 and pos > 0:
-            logger.print(f"EMERGENCY UNWIND LONG: mid={mid} ema={ema:.1f} pos={pos}")
+        # Emergency unwind if price moves far outside the trading range
+        if mid < 9820 and pos > 0:
             return [Order(product, int(best_bid), -pos)]
-        if mid > ema + 100 and pos < 0:
-            logger.print(f"EMERGENCY UNWIND SHORT: mid={mid} ema={ema:.1f} pos={pos}")
+        if mid > 10100 and pos < 0:
             return [Order(product, int(best_ask), -pos)]
 
         buy_room  = HYDRO_POS_LIM - pos
         sell_room = HYDRO_POS_LIM + pos
         orders: List[Order] = []
 
-        for offset, target in HYDRO_BUY_OFFSETS:
-            if mid < ema + offset:
-                # microprice confirmation: book leans up (price about to recover)
-                if microprice >= mid:
+        for threshold, target in HYDRO_BUY_TIERS:
+            if mid < threshold:
+                if microprice >= mid:  # book leaning up: price about to recover
                     qty = min(HYDRO_STEP_SIZE, target - pos, buy_room)
                     if qty > 0:
                         orders.append(Order(product, int(best_ask), qty))
                 break
 
         if not orders:
-            for offset, target in HYDRO_SELL_OFFSETS:
-                if mid > ema + offset:
-                    # microprice confirmation: book leans down (price about to fall)
-                    if microprice <= mid:
+            for threshold, target in HYDRO_SELL_TIERS:
+                if mid > threshold:
+                    if microprice <= mid:  # book leaning down: price about to fall
                         qty = min(HYDRO_STEP_SIZE, pos + target, sell_room)
                         if qty > 0:
                             orders.append(Order(product, int(best_bid), -qty))
