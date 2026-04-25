@@ -23,8 +23,9 @@ HYDRO_SELL_TIERS = [
     (10025, 55),
 ]
 
-HYDRO_NEUTRAL_FLATTEN = False
-HYDRO_FLATTEN_TRIGGER = 30
+# Maker (passive quote) parameters
+HYDRO_MAKER_SIZE  = 12   # units per side per tick
+HYDRO_MAKER_SKEW  = 25   # if |pos| > this, only quote the side that reduces inventory
 
 
 class Logger:
