@@ -174,9 +174,9 @@ class Trader:
         delta      = max(-HYDRO_STEP_SIZE, min(HYDRO_STEP_SIZE, target - pos))
 
         # --- Taker ---
-        # Three-way gate: BB signal + RSI confirmation + trend filter.
+        # Gate on warmup: EMAs need time to calibrate before taker fires.
         orders: List[Order] = []
-        if abs(z) >= HYDRO_BB_K:
+        if ticks >= HYDRO_WARMUP and abs(z) >= HYDRO_BB_K:
             if delta > 0 and rsi < HYDRO_RSI_LOW:
                 qty = min(delta, buy_room)
                 if qty > 0:
