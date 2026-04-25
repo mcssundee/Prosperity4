@@ -122,17 +122,21 @@ class Trader:
 
         for offset, target in HYDRO_BUY_OFFSETS:
             if mid < ema + offset:
-                qty = min(HYDRO_STEP_SIZE, target - pos, buy_room)
-                if qty > 0:
-                    orders.append(Order(product, int(best_ask), qty))
+                # microprice confirmation: book leans down too (not just noise)
+                if microprice <= mid:
+                    qty = min(HYDRO_STEP_SIZE, target - pos, buy_room)
+                    if qty > 0:
+                        orders.append(Order(product, int(best_ask), qty))
                 break
 
         if not orders:
             for offset, target in HYDRO_SELL_OFFSETS:
                 if mid > ema + offset:
-                    qty = min(HYDRO_STEP_SIZE, pos + target, sell_room)
-                    if qty > 0:
-                        orders.append(Order(product, int(best_bid), -qty))
+                    # microprice confirmation: book leans up too
+                    if microprice >= mid:
+                        qty = min(HYDRO_STEP_SIZE, pos + target, sell_room)
+                        if qty > 0:
+                            orders.append(Order(product, int(best_bid), -qty))
                     break
 
         if not orders and HYDRO_NEUTRAL_FLATTEN:
