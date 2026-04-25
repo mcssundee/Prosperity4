@@ -96,21 +96,12 @@ class Trader:
         if spread > HYDRO_MAX_SPREAD or spread <= 0:
             return []
 
-        # Microprice: lean toward the thinner side of the book
-        bid_vol = od.buy_orders[best_bid]
-        ask_vol = abs(od.sell_orders[best_ask])
-        total_vol = bid_vol + ask_vol
-        if total_vol > 0:
-            microprice = (best_bid * ask_vol + best_ask * bid_vol) / total_vol
-        else:
-            microprice = (best_bid + best_ask) / 2.0
-
-        # EMA of microprice — slow enough to filter noise, fast enough to track drift
-        prev_ema = saved.get("h_ema", HYDRO_FAIR_INIT)
-        ema = HYDRO_EMA_ALPHA * microprice + (1 - HYDRO_EMA_ALPHA) * prev_ema
-        saved["h_ema"] = round(ema, 4)
-
         mid = (best_bid + best_ask) / 2.0
+
+        # Slow EMA of mid — barely drifts from 10k, only tracks genuine regime shifts
+        prev_ema = saved.get("h_ema", HYDRO_FAIR_INIT)
+        ema = HYDRO_EMA_ALPHA * mid + (1 - HYDRO_EMA_ALPHA) * prev_ema
+        saved["h_ema"] = round(ema, 4)
         pos = state.position.get(product, 0)
 
         # Emergency unwind: price escaped far from fair value
