@@ -17,10 +17,10 @@ HYDRO_BUY_TIERS = [
 
 # Sell tiers: (mid_above_threshold, target_short_position)
 HYDRO_SELL_TIERS = [
-    (10035, 70),
-    (10030, 60),
-    (10025, 50),
-    (10020, 40),
+    (10040, 70),
+    (10035, 60),
+    (10030, 50),
+    (10025, 40),
 ]
 
 HYDRO_NEUTRAL_FLATTEN = False
