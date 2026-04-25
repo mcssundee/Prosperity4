@@ -39,6 +39,8 @@ HYDRO_ATR_MAX_MULT = 1.0   # no upside scaling — only shrink in high vol
 # Base position target at z=BB_K and normal ATR.
 HYDRO_BASE_TARGET = 55
 
+HYDRO_TAKER_MAX  = 100   # taker never builds more than this; limits trend exposure
+
 HYDRO_MAKER_SIZE    = 12
 HYDRO_MAKER_MAX_POS = 15
 
