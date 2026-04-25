@@ -25,8 +25,8 @@ HYDRO_TREND_THRESH = 5.0
 # --- RSI ---
 # Confirmation filter: only take a trade when RSI agrees with the BB signal.
 HYDRO_RSI_ALPHA = 0.005
-HYDRO_RSI_LOW   = 45     # below this = oversold → confirms buy
-HYDRO_RSI_HIGH  = 55     # above this = overbought → confirms sell
+HYDRO_RSI_LOW   = 47     # below this = oversold → confirms buy
+HYDRO_RSI_HIGH  = 53     # above this = overbought → confirms sell
 
 # --- ATR ---
 # EMA of |microprice change per tick| — scales position size.
