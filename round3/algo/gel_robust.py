@@ -2,22 +2,12 @@ import json
 from datamodel import Order, TradingState
 from typing import List
 
-HYDRO_POS_LIM      = 200
-HYDRO_STEP_SIZE    = 20
-HYDRO_MAX_SPREAD   = 20
-
-# EMA alphas — all applied every tick (100ms), so:
-#   0.001 ≈ 693-tick (~70s) halflife
-#   0.01  ≈ 69-tick  (~7s)  halflife
-HYDRO_FAIR_ALPHA   = 0.001  # rolling fair value (slow EMA of microprice)
-HYDRO_FAST_ALPHA   = 0.01   # fast trend EMA
-HYDRO_SLOW_ALPHA   = 0.001  # slow trend EMA
-
-HYDRO_POS_SCALE    = 0.92   # position units per tick of deviation from fair
-                            # → target ≈ 55 at 60-tick move (matches original tiers)
-HYDRO_MIN_DEV      = 20.0   # minimum deviation (ticks) to place any taker order
-HYDRO_TREND_THRESH = 5.0    # fast-slow gap (ticks) to classify market as trending
-HYDRO_STOP_THRESH  = 10.0   # fast-slow gap to trigger stop-loss on existing position
+HYDRO_POS_LIM    = 200
+HYDRO_STEP_SIZE  = 20
+HYDRO_MAX_SPREAD = 20
+HYDRO_FAIR_ALPHA = 0.001  # slow EMA — ~693-tick halflife (~70s)
+HYDRO_MIN_DEV    = 20.0   # minimum deviation (ticks) before taker fires
+HYDRO_POS_SCALE  = 0.92   # units per tick of deviation; 60 ticks → ~55 units
 
 HYDRO_MAKER_SIZE    = 12
 HYDRO_MAKER_MAX_POS = 15
@@ -66,9 +56,9 @@ class Trader:
                 pass
 
         result = {}
-        hydro_orders = self.hydro_strategy(state, saved)
-        if hydro_orders:
-            result["HYDROGEL_PACK"] = hydro_orders
+        orders = self.hydro_strategy(state, saved)
+        if orders:
+            result["HYDROGEL_PACK"] = orders
 
         trader_data = json.dumps(saved)
         logger.flush(state, result, 0, trader_data)
@@ -83,8 +73,7 @@ class Trader:
         best_bid = max(od.buy_orders)
         best_ask = min(od.sell_orders)
         spread = best_ask - best_bid
-
-        if spread > HYDRO_MAX_SPREAD or spread <= 0:
+        if spread <= 0 or spread > HYDRO_MAX_SPREAD:
             return []
 
         bid_vol = od.buy_orders[best_bid]
@@ -93,63 +82,31 @@ class Trader:
         microprice = (best_bid * ask_vol + best_ask * bid_vol) / total_vol if total_vol > 0 else (best_bid + best_ask) / 2.0
 
         pos = state.position.get(product, 0)
-
-        # Update EMAs from persisted state
-        fair = saved.get("hydro_fair", microprice)
-        fast = saved.get("hydro_fast", microprice)
-        slow = saved.get("hydro_slow", microprice)
-
-        fair = HYDRO_FAIR_ALPHA * microprice + (1 - HYDRO_FAIR_ALPHA) * fair
-        fast = HYDRO_FAST_ALPHA * microprice + (1 - HYDRO_FAST_ALPHA) * fast
-        slow = HYDRO_SLOW_ALPHA * microprice + (1 - HYDRO_SLOW_ALPHA) * slow
-
-        saved["hydro_fair"] = fair
-        saved["hydro_fast"] = fast
-        saved["hydro_slow"] = slow
-
-        # Positive deviation → price below fair → buy signal
-        deviation   = fair - microprice
-        trend_gap   = fast - slow          # positive = uptrend, negative = downtrend
-        trending_up   = trend_gap >  HYDRO_TREND_THRESH
-        trending_down = trend_gap < -HYDRO_TREND_THRESH
-
         buy_room  = HYDRO_POS_LIM - pos
         sell_room = HYDRO_POS_LIM + pos
+
+        fair = saved.get("hydro_fair", microprice)
+        fair = HYDRO_FAIR_ALPHA * microprice + (1 - HYDRO_FAIR_ALPHA) * fair
+        saved["hydro_fair"] = fair
+
+        deviation = fair - microprice
         orders: List[Order] = []
 
-        # Stop-loss: exit if a sizable position is caught in a strong opposing trend.
-        # Reduces at 2× normal step size to get out faster than we got in.
-        if pos > 50 and trend_gap < -HYDRO_STOP_THRESH:
-            qty = min(HYDRO_STEP_SIZE * 2, pos)
-            orders.append(Order(product, best_bid, -qty))
-            return orders
-        if pos < -50 and trend_gap > HYDRO_STOP_THRESH:
-            qty = min(HYDRO_STEP_SIZE * 2, -pos)
-            orders.append(Order(product, best_ask, qty))
-            return orders
-
-        # Continuous position target: linear in deviation, clamped to limits.
-        # Gate on minimum deviation so sub-threshold noise never triggers a taker order.
-        if abs(deviation) < HYDRO_MIN_DEV:
-            delta = 0
-        else:
+        # Taker: fade moves away from fair value once deviation is large enough.
+        if abs(deviation) >= HYDRO_MIN_DEV:
             raw_target = deviation * HYDRO_POS_SCALE
-            target_pos = int(max(-HYDRO_POS_LIM, min(HYDRO_POS_LIM, raw_target)))
-            delta = target_pos - pos
-            delta = max(-HYDRO_STEP_SIZE, min(HYDRO_STEP_SIZE, delta))
+            target = int(max(-HYDRO_POS_LIM, min(HYDRO_POS_LIM, raw_target)))
+            delta = max(-HYDRO_STEP_SIZE, min(HYDRO_STEP_SIZE, target - pos))
+            if delta > 0:
+                qty = min(delta, buy_room)
+                if qty > 0:
+                    orders.append(Order(product, best_ask, qty))
+            elif delta < 0:
+                qty = min(-delta, sell_room)
+                if qty > 0:
+                    orders.append(Order(product, best_bid, -qty))
 
-        # Trend filter: only take mean-reversion trades when not in a trend.
-        # Lets existing positions ride; only blocks new entries.
-        if delta > 0 and not trending_down:
-            qty = min(delta, buy_room)
-            if qty > 0:
-                orders.append(Order(product, best_ask, qty))
-        elif delta < 0 and not trending_up:
-            qty = min(-delta, sell_room)
-            if qty > 0:
-                orders.append(Order(product, best_bid, -qty))
-
-        # Maker: passive quotes only when flat and no taker order was placed.
+        # Maker: passive quotes inside the spread when position is near flat.
         if not orders and spread >= 4 and abs(pos) <= HYDRO_MAKER_MAX_POS:
             quote_bid = best_bid + 1
             quote_ask = best_ask - 1
