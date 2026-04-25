@@ -1,23 +1,28 @@
 import json
 from datamodel import Order, TradingState
-from typing import Dict, List, Optional
+from typing import List
 
 HYDRO_POS_LIM    = 200
 HYDRO_STEP_SIZE  = 20
 HYDRO_MAX_SPREAD = 20
+HYDRO_EMA_ALPHA  = 0.10
+HYDRO_FAIR_INIT  = 10000.0
 
-HYDRO_BUY_TIERS = [
-    (9925, 70),
-    (9930, 60),
-    (9935, 50),
-    (9940, 40),
+# Offsets from dynamic fair value (EMA of microprice).
+# Buy: mid < fair + offset → target long position
+HYDRO_BUY_OFFSETS = [
+    (-75, 70),
+    (-70, 60),
+    (-65, 50),
+    (-60, 40),
 ]
 
-HYDRO_SELL_TIERS = [
-    (10040, 70),
-    (10035, 60),
-    (10030, 50),
-    (10025, 40),
+# Sell: mid > fair + offset → target short position
+HYDRO_SELL_OFFSETS = [
+    (40, 70),
+    (35, 60),
+    (30, 50),
+    (25, 40),
 ]
 
 HYDRO_NEUTRAL_FLATTEN = False
@@ -62,17 +67,23 @@ class Trader:
         return 1
 
     def run(self, state: TradingState):
-        result: Dict[str, List[Order]] = {}
+        saved = {}
+        if state.traderData:
+            try:
+                saved = json.loads(state.traderData)
+            except Exception:
+                pass
 
-        hydro_orders = self.hydro_range_strategy(state)
+        result = {}
+        hydro_orders = self.hydro_range_strategy(state, saved)
         if hydro_orders:
             result["HYDROGEL_PACK"] = hydro_orders
 
-        trader_data = ""
+        trader_data = json.dumps(saved)
         logger.flush(state, result, 0, trader_data)
         return result, 0, trader_data
 
-    def hydro_range_strategy(self, state: TradingState) -> list:
+    def hydro_range_strategy(self, state: TradingState, saved: dict) -> list:
         product = "HYDROGEL_PACK"
         od = state.order_depths.get(product)
         if od is None or not od.buy_orders or not od.sell_orders:
@@ -85,30 +96,45 @@ class Trader:
         if spread > HYDRO_MAX_SPREAD or spread <= 0:
             return []
 
-        mid = (best_bid + best_ask) / 2
+        # Microprice: lean toward the thinner side of the book
+        bid_vol = od.buy_orders[best_bid]
+        ask_vol = abs(od.sell_orders[best_ask])
+        total_vol = bid_vol + ask_vol
+        if total_vol > 0:
+            microprice = (best_bid * ask_vol + best_ask * bid_vol) / total_vol
+        else:
+            microprice = (best_bid + best_ask) / 2.0
+
+        # EMA of microprice — slow enough to filter noise, fast enough to track drift
+        prev_ema = saved.get("h_ema", HYDRO_FAIR_INIT)
+        ema = HYDRO_EMA_ALPHA * microprice + (1 - HYDRO_EMA_ALPHA) * prev_ema
+        saved["h_ema"] = round(ema, 4)
+
+        mid = (best_bid + best_ask) / 2.0
         pos = state.position.get(product, 0)
 
-        if mid < 9820 and pos > 0:
-            logger.print(f"EMERGENCY UNWIND LONG: mid={mid} pos={pos}")
+        # Emergency unwind: price escaped far from fair value
+        if mid < ema - 180 and pos > 0:
+            logger.print(f"EMERGENCY UNWIND LONG: mid={mid} ema={ema:.1f} pos={pos}")
             return [Order(product, int(best_bid), -pos)]
-        if mid > 10100 and pos < 0:
-            logger.print(f"EMERGENCY UNWIND SHORT: mid={mid} pos={pos}")
+        if mid > ema + 100 and pos < 0:
+            logger.print(f"EMERGENCY UNWIND SHORT: mid={mid} ema={ema:.1f} pos={pos}")
             return [Order(product, int(best_ask), -pos)]
 
         buy_room  = HYDRO_POS_LIM - pos
         sell_room = HYDRO_POS_LIM + pos
-        orders = []
+        orders: List[Order] = []
 
-        for threshold, target in HYDRO_BUY_TIERS:
-            if mid < threshold:
+        for offset, target in HYDRO_BUY_OFFSETS:
+            if mid < ema + offset:
                 qty = min(HYDRO_STEP_SIZE, target - pos, buy_room)
                 if qty > 0:
                     orders.append(Order(product, int(best_ask), qty))
                 break
 
         if not orders:
-            for threshold, target in HYDRO_SELL_TIERS:
-                if mid > threshold:
+            for offset, target in HYDRO_SELL_OFFSETS:
+                if mid > ema + offset:
                     qty = min(HYDRO_STEP_SIZE, pos + target, sell_room)
                     if qty > 0:
                         orders.append(Order(product, int(best_bid), -qty))
