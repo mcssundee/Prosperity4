@@ -13,8 +13,9 @@ HYDRO_FAIR_ALPHA   = 0.001  # rolling fair value (slow EMA of microprice)
 HYDRO_FAST_ALPHA   = 0.01   # fast trend EMA
 HYDRO_SLOW_ALPHA   = 0.001  # slow trend EMA
 
-HYDRO_POS_SCALE    = 3.5    # position units per tick of deviation from fair
-                            # → target ≈ 55 at 15-tick move, 200 at 57-tick move
+HYDRO_POS_SCALE    = 0.92   # position units per tick of deviation from fair
+                            # → target ≈ 55 at 60-tick move (matches original tiers)
+HYDRO_MIN_DEV      = 20.0   # minimum deviation (ticks) to place any taker order
 HYDRO_TREND_THRESH = 5.0    # fast-slow gap (ticks) to classify market as trending
 HYDRO_STOP_THRESH  = 10.0   # fast-slow gap to trigger stop-loss on existing position
 
