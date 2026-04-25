@@ -150,15 +150,13 @@ class Trader:
                 orders.append(Order(product, best_bid, -qty))
 
         # Maker: passive quotes only when flat and no taker order was placed.
-        # Each side is independently gated by the trend filter so the maker
-        # never builds a directional position against the prevailing trend.
         if not orders and spread >= 4 and abs(pos) <= HYDRO_MAKER_MAX_POS:
             quote_bid = best_bid + 1
             quote_ask = best_ask - 1
             if quote_bid < quote_ask:
-                if buy_room > 0 and not trending_down:
+                if buy_room > 0:
                     orders.append(Order(product, quote_bid, min(HYDRO_MAKER_SIZE, buy_room)))
-                if sell_room > 0 and not trending_up:
+                if sell_room > 0:
                     orders.append(Order(product, quote_ask, -min(HYDRO_MAKER_SIZE, sell_room)))
 
         return orders
