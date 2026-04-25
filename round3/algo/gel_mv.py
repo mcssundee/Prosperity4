@@ -174,11 +174,11 @@ class Trader:
         # Three-way gate: BB signal + RSI confirmation + trend filter.
         orders: List[Order] = []
         if abs(z) >= HYDRO_BB_K:
-            if delta > 0 and rsi < HYDRO_RSI_LOW and not trending_down:
+            if delta > 0 and rsi < HYDRO_RSI_LOW:
                 qty = min(delta, buy_room)
                 if qty > 0:
                     orders.append(Order(product, best_ask, qty))
-            elif delta < 0 and rsi > HYDRO_RSI_HIGH and not trending_up:
+            elif delta < 0 and rsi > HYDRO_RSI_HIGH:
                 qty = min(-delta, sell_room)
                 if qty > 0:
                     orders.append(Order(product, best_bid, -qty))
