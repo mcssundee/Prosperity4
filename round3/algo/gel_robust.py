@@ -119,11 +119,11 @@ class Trader:
 
         # Stop-loss: exit if a sizable position is caught in a strong opposing trend.
         # Reduces at 2× normal step size to get out faster than we got in.
-        if pos > HYDRO_STOP_POS and trend_gap < -HYDRO_STOP_THRESH:
+        if pos > 50 and trend_gap < -HYDRO_STOP_THRESH:
             qty = min(HYDRO_STEP_SIZE * 2, pos)
             orders.append(Order(product, best_bid, -qty))
             return orders
-        if pos < -HYDRO_STOP_POS and trend_gap > HYDRO_STOP_THRESH:
+        if pos < -50 and trend_gap > HYDRO_STOP_THRESH:
             qty = min(HYDRO_STEP_SIZE * 2, -pos)
             orders.append(Order(product, best_ask, qty))
             return orders
