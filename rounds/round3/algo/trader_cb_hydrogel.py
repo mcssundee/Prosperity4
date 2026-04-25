@@ -3,7 +3,7 @@ from datamodel import Order, TradingState
 from typing import List
 
 HYDRO_POS_LIM    = 200
-HYDRO_STEP_SIZE  = 40
+HYDRO_STEP_SIZE  = 20
 HYDRO_MAX_SPREAD = 20
 HYDRO_FAIR_INIT  = 10000.0
 
