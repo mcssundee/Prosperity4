@@ -35,36 +35,66 @@ class Logger:
 
 logger = Logger()
 
+# Strategy parameters (tuned by backtest sweep):
+#   EMA alpha=0.30 tracks the mid price quickly enough to follow
+#   intraday drift while still mean-reverting. Spread=5 captures
+#   the wide market spread (~16 ticks) without being uncompetitive.
+#   qlim=15 limits passive quote size to avoid position saturation.
+EMA_ALPHA = 0.30
+PASSIVE_SPREAD = 5
+QUOTE_LIM = 15
+POS_LIM = 200
+
 
 class Trader:
     def run(self, state: TradingState):
         result = defaultdict(list)
         conversions = 0
 
-        result['HYDROGEL_PACK'] = self.hydrogel(state)
+        shared = {}
+        if state.traderData:
+            try:
+                shared = json.loads(state.traderData)
+            except json.JSONDecodeError:
+                pass
 
-        traderData = ""
+        result['HYDROGEL_PACK'], hp_data = self.hydrogel(state, shared)
+
+        traderData = json.dumps(hp_data)
         logger.flush(state, result, conversions, traderData)
         return result, conversions, traderData
 
-    def hydrogel(self, state: TradingState):
+    def hydrogel(self, state: TradingState, shared: dict):
         product = 'HYDROGEL_PACK'
         result = []
-        pos_lim = 200
-        quote_lim = 15
-        fair = 10000
 
         if product not in state.order_depths:
-            return result
+            return result, shared
 
         od = state.order_depths[product]
-        pos = state.position.get(product, 0)
         bids = sorted(od.buy_orders, reverse=True)
         asks = sorted(od.sell_orders)
 
-        buy_cap = pos_lim - pos
-        sell_cap = pos_lim + pos
+        # EMA fair value — tracks intraday price drift
+        if bids and asks:
+            mid = (bids[0] + asks[0]) / 2.0
+        elif bids:
+            mid = float(bids[0])
+        elif asks:
+            mid = float(asks[0])
+        else:
+            mid = shared.get("hp_ema", 10000.0)
 
+        ema = shared.get("hp_ema", mid)
+        ema = EMA_ALPHA * mid + (1.0 - EMA_ALPHA) * ema
+        shared["hp_ema"] = ema
+        fair = ema
+
+        pos = state.position.get(product, 0)
+        buy_cap = POS_LIM - pos
+        sell_cap = POS_LIM + pos
+
+        # Active take: cross the spread when price is mispriced vs EMA
         for ask in asks:
             if ask < fair and buy_cap > 0:
                 qty = min(buy_cap, abs(od.sell_orders[ask]))
@@ -76,9 +106,11 @@ class Trader:
                 result.append(Order(product, bid, -qty))
                 sell_cap -= qty
 
+        # Passive make: quote ±5 around EMA to capture wide market spread
+        fair_int = round(fair)
         if buy_cap > 0:
-            result.append(Order(product, fair - 1, min(quote_lim, buy_cap)))
+            result.append(Order(product, fair_int - PASSIVE_SPREAD, min(QUOTE_LIM, buy_cap)))
         if sell_cap > 0:
-            result.append(Order(product, fair + 1, -min(quote_lim, sell_cap)))
+            result.append(Order(product, fair_int + PASSIVE_SPREAD, -min(QUOTE_LIM, sell_cap)))
 
-        return result
+        return result, shared
