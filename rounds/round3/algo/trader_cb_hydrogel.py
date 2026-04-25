@@ -23,9 +23,9 @@ HYDRO_SELL_TIERS = [
     (10025, 55),
 ]
 
-# Maker (passive quote) parameters
-HYDRO_MAKER_SIZE  = 12   # units per side per tick
-HYDRO_MAKER_SKEW  = 25   # if |pos| > this, only quote the side that reduces inventory
+# Maker (passive quote) parameters — only active when position is near flat
+HYDRO_MAKER_SIZE     = 12   # units per side per tick
+HYDRO_MAKER_MAX_POS  = 15   # maker shuts off entirely if |pos| > this
 
 
 class Logger:
