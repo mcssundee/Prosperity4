@@ -114,19 +114,17 @@ class Trader:
 
         for threshold, target in HYDRO_BUY_TIERS:
             if mid < threshold:
-                if microprice >= mid:  # book leaning up: price about to recover
-                    qty = min(HYDRO_STEP_SIZE, target - pos, buy_room)
-                    if qty > 0:
-                        orders.append(Order(product, int(best_ask), qty))
+                qty = min(HYDRO_STEP_SIZE, target - pos, buy_room)
+                if qty > 0:
+                    orders.append(Order(product, int(best_ask), qty))
                 break
 
         if not orders:
             for threshold, target in HYDRO_SELL_TIERS:
                 if mid > threshold:
-                    if microprice <= mid:  # book leaning down: price about to fall
-                        qty = min(HYDRO_STEP_SIZE, pos + target, sell_room)
-                        if qty > 0:
-                            orders.append(Order(product, int(best_bid), -qty))
+                    qty = min(HYDRO_STEP_SIZE, pos + target, sell_room)
+                    if qty > 0:
+                        orders.append(Order(product, int(best_bid), -qty))
                     break
 
         if not orders and HYDRO_NEUTRAL_FLATTEN:
