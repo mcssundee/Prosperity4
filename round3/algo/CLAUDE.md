@@ -1,16 +1,3 @@
-# Round 3 **- “Gloves Off”**
-
-Welcome to Solvenar! A prosperous and highly developed planet known for technological innovation, a robust economy, and thriving cultural sectors.
-
-This awe-inspiring society will be the stage for the ***Great Orbital Ascension Trials*** (GOAT). In this Great Galactic Trade-Off, you will face other trading crews head-on as you compete for the coveted title of Trading Champion of the Galaxy. This trading round marks the start of GOAT, where ***all teams begin with zero PnL and the leaderboard is reset***.
-
-You will develop a new Python program and incorporate your strategy for trading ***Hydrogel Packs*** (`HYDROGEL_PACK`), ***Velvetfruit Extract*** (`VELVETFRUIT_EXTRACT`), and ***10 Velvetfruit Extract Vouchers*** (`VELVETFRUIT_EXTRACT_VOUCHER`). These vouchers give you the right to buy Velvetfruit Extract at a later point for a specific strike price.
-
-# **Round Objective**
-
-Create a new Python program that algorithmically trades `HYDROGEL_PACK`, `VELVETFRUIT_EXTRACT`, and `VELVETFRUIT_EXTRACT_VOUCHER` on your behalf and generates your first profit in this final phase.
-
-# **Algorithmic trading challenge: “Options Require Decisions”**
 
 There are 2 ‘asset classes’ in the three products you trade. The `HYDROGEL_PACK` and `VELVETFRUIT_EXTRACT` are “delta 1” products, similar to the products in the tutorial and rounds 1 and 2. The 10 `VELVETFRUIT_EXTRACT_VOUCHER` products (each with a different strike price) are options, and thus follow different dynamics. All products are traded independently, even though the price of `VELVETFRUIT_EXTRACT_VOUCHER` might be related to that of `VELVETFRUIT_EXTRACT` due to the nature of options.
 
