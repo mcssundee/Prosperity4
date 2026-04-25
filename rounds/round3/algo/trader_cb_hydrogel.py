@@ -5,7 +5,7 @@ from typing import List
 HYDRO_POS_LIM    = 200
 HYDRO_STEP_SIZE  = 20
 HYDRO_MAX_SPREAD = 20
-HYDRO_EMA_ALPHA  = 0.10
+HYDRO_EMA_ALPHA  = 0.001   # very slow — anchors near 10k, adapts only to genuine regime shifts
 HYDRO_FAIR_INIT  = 10000.0
 
 # Offsets from dynamic fair value (EMA of microprice).
