@@ -16,9 +16,8 @@ HYDRO_SLOW_ALPHA   = 0.001  # slow trend EMA
 HYDRO_POS_SCALE    = 0.92   # position units per tick of deviation from fair
                             # → target ≈ 55 at 60-tick move (matches original tiers)
 HYDRO_MIN_DEV      = 20.0   # minimum deviation (ticks) to place any taker order
-HYDRO_TREND_THRESH = 10.0   # fast-slow gap (ticks) to classify market as trending
-HYDRO_STOP_THRESH  = 15.0   # fast-slow gap to trigger stop-loss on existing position
-HYDRO_STOP_POS     = 12     # minimum position size to trigger stop (≈ one maker fill)
+HYDRO_TREND_THRESH = 5.0    # fast-slow gap (ticks) to classify market as trending
+HYDRO_STOP_THRESH  = 10.0   # fast-slow gap to trigger stop-loss on existing position
 
 HYDRO_MAKER_SIZE    = 12
 HYDRO_MAKER_MAX_POS = 15
