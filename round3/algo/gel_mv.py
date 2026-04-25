@@ -20,8 +20,8 @@ HYDRO_VAR_INIT  = 25.0   # initial variance (σ=5 ticks); converges to true vol
 # alpha=0.005 → ~138-tick halflife; thresholds 40/60 (inside traditional 30/70
 # to account for tick-level data being noisier than daily bars).
 HYDRO_RSI_ALPHA = 0.005
-HYDRO_RSI_LOW   = 45     # below this = oversold → confirms buy
-HYDRO_RSI_HIGH  = 55     # above this = overbought → confirms sell
+HYDRO_RSI_LOW   = 47     # below this = oversold → confirms buy
+HYDRO_RSI_HIGH  = 53     # above this = overbought → confirms sell
 
 # --- ATR ---
 # EMA of |microprice change per tick| — captures short-term realized volatility.
