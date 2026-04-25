@@ -102,7 +102,6 @@ class Trader:
         mid = (best_bid + best_ask) / 2.0
         pos = state.position.get(product, 0)
 
-        # Emergency unwind if price moves far outside the trading range
         if mid < 9820 and pos > 0:
             return [Order(product, int(best_bid), -pos)]
         if mid > 10100 and pos < 0:
