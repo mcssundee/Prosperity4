@@ -96,9 +96,16 @@ class Trader:
         if spread > HYDRO_MAX_SPREAD or spread <= 0:
             return []
 
-        mid = (best_bid + best_ask) / 2.0
+        bid_vol = od.buy_orders[best_bid]
+        ask_vol = abs(od.sell_orders[best_ask])
+        total_vol = bid_vol + ask_vol
+        if total_vol > 0:
+            microprice = (best_bid * ask_vol + best_ask * bid_vol) / total_vol
+        else:
+            microprice = (best_bid + best_ask) / 2.0
 
-        ema = HYDRO_FAIR_INIT  # static for now
+        mid = (best_bid + best_ask) / 2.0
+        ema = HYDRO_FAIR_INIT  # static anchor — critical for mean-reversion logic
         pos = state.position.get(product, 0)
 
         # Emergency unwind: price escaped far from fair value
