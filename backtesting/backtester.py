@@ -62,6 +62,7 @@ if __name__ == "__main__":
     parser.add_argument("--vis", action="store_true", help="Open visualizer in browser")
     parser.add_argument("--merge-pnl", action="store_true", help="Carry PnL forward across days")
     parser.add_argument("--print", action="store_true", help="Print trader's stdout during backtest")
+    parser.add_argument("--trader", type=str, default=None, help="Per-asset trader stem: 'hydrogel', 'vev_spot', 'vev_options'. Resolves to trader_<name>.py in the round's algo/ folder. Omit for default trader.py.")
     args = parser.parse_args()
 
     exit_code = run_backtest(args.round, round_spec=args.day, data_dir=args.data, vis=args.vis, merge_pnl=args.merge_pnl, print_output=args.print, trader=args.trader)
