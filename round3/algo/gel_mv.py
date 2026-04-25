@@ -155,14 +155,16 @@ class Trader:
         atr = HYDRO_ATR_ALPHA * abs(microprice - prev) + (1 - HYDRO_ATR_ALPHA) * atr
 
         # Persist state
-        saved["hydro_prev"] = microprice
-        saved["hydro_mu"]   = mu
-        saved["hydro_var"]  = var
-        saved["hydro_fast"] = fast
-        saved["hydro_slow"] = slow
-        saved["hydro_gain"] = avg_gain
-        saved["hydro_loss"] = avg_loss
-        saved["hydro_atr"]  = atr
+        ticks = saved.get("hydro_ticks", 0) + 1
+        saved["hydro_ticks"] = ticks
+        saved["hydro_prev"]  = microprice
+        saved["hydro_mu"]    = mu
+        saved["hydro_var"]   = var
+        saved["hydro_fast"]  = fast
+        saved["hydro_slow"]  = slow
+        saved["hydro_gain"]  = avg_gain
+        saved["hydro_loss"]  = avg_loss
+        saved["hydro_atr"]   = atr
 
         # --- Position target ---
         # ATR only shrinks position in high vol; never inflates it (MAX_MULT=1.0).
