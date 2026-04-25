@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 
-def run_backtest(round_num, round_spec=None, data_dir=None, vis=False, merge_pnl=False, print_output=False):
+def run_backtest(round_num, round_spec=None, data_dir=None, vis=False, merge_pnl=False, print_output=False, trader=None):
     """
     Run backtest using prosperity4btest CLI.
 
@@ -18,8 +18,12 @@ def run_backtest(round_num, round_spec=None, data_dir=None, vis=False, merge_pnl
         vis: Open visualizer in browser after backtest
         merge_pnl: Carry PnL forward across days
         print_output: Print trader's stdout during backtest
+        trader: Trader filename stem (e.g. "hydrogel" → trader_hydrogel.py). Defaults to trader.py.
     """
-    trader_file = Path(f"rounds/round{round_num}/algo/trader.py").absolute()
+    if trader:
+        trader_file = Path(f"rounds/round{round_num}/algo/trader_{trader}.py").absolute()
+    else:
+        trader_file = Path(f"rounds/round{round_num}/algo/trader.py").absolute()
     if not trader_file.exists():
         print(f"Error: {trader_file} not found", file=sys.stderr)
         return 1
