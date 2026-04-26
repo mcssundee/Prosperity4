@@ -884,10 +884,12 @@ def update(product, selected_traders, ts_range, lookahead):
 @app.callback(
     Output('rel-ts-chart',      'figure'),
     Output('rel-scatter-chart', 'figure'),
+    Output('rel-ccf-chart',     'figure'),
     Input('rel-window-sl', 'value'),
+    Input('rel-lag-sl',    'value'),
     Input('ts-slider',     'value'),
 )
-def update_relationship(window, ts_range):
+def update_relationship(window, max_lag, ts_range):
     start, end = ts_range
 
     hydro = px_dict.get('HYDROGEL_PACK')
