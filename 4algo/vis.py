@@ -264,15 +264,23 @@ def update(product, selected_traders, ts_range, lookahead):
     ]
     tr_sel = tr_w[tr_w['buyer'].isin(selected_traders) | tr_w['seller'].isin(selected_traders)]
 
+    spot_label = f'{product} — pop_mid' if product == 'VELVETFRUIT_EXTRACT' else f'VELVETFRUIT_EXTRACT vs {product} — pop_mid'
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
                         row_heights=[0.3, 0.7], vertical_spacing=0.04,
-                        subplot_titles=['VELVETFRUIT_EXTRACT — Spot (pop_mid)', product])
+                        subplot_titles=[spot_label, product])
 
     fig.add_trace(go.Scatter(
         x=px_spot_w['timestamp'], y=px_spot_w['pop_mid'],
         mode='lines', line=dict(color='#7c9ef5', width=1),
-        name='Spot', showlegend=False
+        name='VELVETFRUIT_EXTRACT', showlegend=(product != 'VELVETFRUIT_EXTRACT')
     ), row=1, col=1)
+
+    if product != 'VELVETFRUIT_EXTRACT':
+        fig.add_trace(go.Scatter(
+            x=px_prod_w['timestamp'], y=px_prod_w['pop_mid'],
+            mode='lines', line=dict(color='#f39c12', width=1),
+            name=product, showlegend=True
+        ), row=1, col=1)
 
     fig.add_trace(go.Scatter(
         x=px_prod_w['timestamp'], y=px_prod_w['pop_mid'],

@@ -63,7 +63,8 @@
       "Bash(mv /Users/Guan/Prosperity4/round3/algo/* /Users/Guan/Prosperity4/round3/)",
       "Bash(mv /Users/Guan/Prosperity4/round4/algo/* /Users/Guan/Prosperity4/round4/)",
       "Bash(mv /Users/Guan/Prosperity4/round5/algo/* /Users/Guan/Prosperity4/round5/)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(open *)"
     ]
   }
 }
