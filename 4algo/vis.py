@@ -958,20 +958,20 @@ def update_relationship(max_lag, window, ts_range):
     empty = go.Figure()
     empty.update_layout(**base_layout())
     if hydro is None:
-        return empty
+        return empty, empty
 
     df = hydro[['timestamp', 'pop_mid']].copy()
     df = df[(df['timestamp'] >= start) & (df['timestamp'] <= end)].reset_index(drop=True)
 
     if len(df) < max_lag + 10:
-        return empty
+        return empty, empty
 
     h_ret = np.diff(df['pop_mid'].values, prepend=df['pop_mid'].values[0])
     sig   = 1.96 / np.sqrt(len(df))
     lags  = list(range(1, max_lag + 1))
 
-    # ---- ACF: HYDROGEL returns vs itself ----
-    acf_vals = [np.corrcoef(h_ret[k:], h_ret[:-k])[0, 1] for k in lags]
+    # ---- ACF bar chart ----
+    acf_vals   = [np.corrcoef(h_ret[k:], h_ret[:-k])[0, 1] for k in lags]
     acf_colors = ['#2ecc71' if abs(c) > sig else '#3a3a5c' for c in acf_vals]
 
     fig_acf = go.Figure()
@@ -982,12 +982,49 @@ def update_relationship(max_lag, window, ts_range):
     fig_acf.add_hline(y= sig, line=dict(color='#ffffff', dash='dot', width=1))
     fig_acf.add_hline(y=-sig, line=dict(color='#ffffff', dash='dot', width=1))
     fig_acf.update_layout(
-        **base_layout(f'HYDROGEL_PACK — Return Autocorrelation (ACF)   95% band ±{sig:.4f}'),
+        **base_layout(f'Full-window ACF   95% band ±{sig:.4f}'),
         xaxis=dict(title='Lag (ticks)', gridcolor=GRID, zerolinecolor='#888'),
         yaxis=dict(title='Autocorrelation', gridcolor=GRID, zerolinecolor=ZERO),
     )
 
-    return fig_acf
+    # ---- Rolling ACF heatmap ----
+    step     = max(1, window // 20)   # ~20 columns per window width
+    ts_vals  = df['timestamp'].values
+    n        = len(h_ret)
+    centers  = []
+    acf_mat  = []   # rows = lags, cols = time windows
+
+    for i in range(0, n - window, step):
+        chunk = h_ret[i:i + window]
+        if len(chunk) < max_lag + 10:
+            continue
+        row = [np.corrcoef(chunk[k:], chunk[:-k])[0, 1] for k in lags]
+        acf_mat.append(row)
+        centers.append(int(ts_vals[min(i + window // 2, n - 1)]))
+
+    if acf_mat:
+        z = np.array(acf_mat).T   # shape: (n_lags, n_windows)
+        fig_heat = go.Figure(go.Heatmap(
+            x=centers,
+            y=lags,
+            z=z,
+            colorscale='RdBu_r',
+            zmid=0,
+            zmin=-0.3, zmax=0.3,
+            colorbar=dict(title='ACF', thickness=12,
+                          tickfont=dict(color='#aaaaaa', size=10)),
+            hovertemplate='Timestamp: %{x}<br>Lag: %{y}<br>ACF: %{z:.4f}<extra></extra>',
+        ))
+        fig_heat.update_layout(
+            **base_layout(f'Rolling ACF heatmap   window={window:,} ticks   '
+                          f'red=momentum · blue=mean-reversion'),
+            xaxis=dict(title='Timestamp', gridcolor=GRID),
+            yaxis=dict(title='Lag (ticks)', gridcolor=GRID, autorange='reversed'),
+        )
+    else:
+        fig_heat = empty
+
+    return fig_acf, fig_heat
 
 
 if __name__ == '__main__':
