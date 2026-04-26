@@ -380,6 +380,7 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
 
         html.Div(style={'flex': 1}, children=[
             html.H4("Trades in Window", style={'color': '#00e5ff', 'margin': '8px 0 4px'}),
+            info_box("All executed trades for the selected product in the current timestamp range."),
             html.Div(id='trade-table')
         ]),
     ]),
