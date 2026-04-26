@@ -201,6 +201,72 @@ def compute_pnl(product, px_df):
 
 
 # ---------------------------------------------------------------------------
+# Shadow strategy helper
+# ---------------------------------------------------------------------------
+def compute_shadow_pnl(product, px_df, focus_trader, mom_thr, obi_thr):
+    """
+    Simulate copying focus_trader's trades one price-tick later.
+    Returns (blind_df, filtered_df) — each has columns (timestamp, pnl).
+    blind    = copy every trade unconditionally
+    filtered = only copy when |momentum| < mom_thr AND |obi| < obi_thr at trade time
+    """
+    tr = tr_all[tr_all['symbol'] == product].sort_values('timestamp').reset_index(drop=True)
+    focus = tr[(tr['buyer'] == focus_trader) | (tr['seller'] == focus_trader)]
+    if len(focus) == 0 or px_df is None or len(px_df) == 0:
+        return pd.DataFrame(), pd.DataFrame()
+
+    px_ts  = px_df['timestamp'].values
+    px_mid = px_df['pop_mid'].values
+
+    bv    = px_df[['bid_volume_1', 'bid_volume_2', 'bid_volume_3']].fillna(0).sum(axis=1).values
+    av    = px_df[['ask_volume_1', 'ask_volume_2', 'ask_volume_3']].fillna(0).sum(axis=1).values
+    total = bv + av
+    obi   = np.where(total > 0, (bv - av) / total, 0.0)
+    mom   = pd.Series(px_mid).diff(500).values
+
+    b_cash, b_pos = 0.0, 0.0
+    f_cash, f_pos = 0.0, 0.0
+    blind_rec, filt_rec = [], []
+
+    for _, row in focus.iterrows():
+        ts  = row['timestamp']
+        qty = float(row['quantity'])
+        direction = 1 if row['buyer'] == focus_trader else -1
+
+        # price we'd execute at (next tick after the observed trade)
+        next_idx = int(np.searchsorted(px_ts, ts, side='right'))
+        if next_idx >= len(px_ts):
+            continue
+        exec_p = px_mid[next_idx]
+        if np.isnan(exec_p):
+            continue
+
+        # regime at the moment of the observed trade
+        reg_idx = max(0, next_idx - 1)
+        mom_val = mom[reg_idx]
+        obi_val = obi[reg_idx]
+
+        # mark-to-market price at trade time
+        mtm = px_mid[reg_idx]
+
+        # blind copy
+        b_cash -= direction * exec_p * qty
+        b_pos  += direction * qty
+        blind_rec.append({'timestamp': ts,
+                          'pnl': b_cash + b_pos * mtm if not np.isnan(mtm) else np.nan})
+
+        # filtered copy
+        in_regime = (not np.isnan(mom_val)) and (abs(mom_val) < mom_thr) and (abs(obi_val) < obi_thr)
+        if in_regime:
+            f_cash -= direction * exec_p * qty
+            f_pos  += direction * qty
+        filt_rec.append({'timestamp': ts,
+                         'pnl': f_cash + f_pos * mtm if not np.isnan(mtm) else np.nan})
+
+    return pd.DataFrame(blind_rec), pd.DataFrame(filt_rec)
+
+
+# ---------------------------------------------------------------------------
 # App layout
 # ---------------------------------------------------------------------------
 app = dash.Dash(__name__)
