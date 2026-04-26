@@ -471,21 +471,46 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
     ]),
     dcc.Graph(id='shadow-chart', style={'height': '45vh', 'padding': '0 0 20px'}),
 
-    # ---- HYDROGEL ACF ----
+    # ---- HYDROGEL ACF + Rolling Heatmap ----
     html.Div(style={'padding': '0 20px 4px', 'borderTop': '1px solid #30363d', 'marginTop': '8px'}, children=[
-        html.H3("HYDROGEL_PACK — Return Autocorrelation (ACF)",
-                style={'color': '#00e5ff', 'margin': '12px 0 4px'}),
-        html.Div([
-            html.Label("Max lag (ticks)", style={'color': '#aaaaaa', 'fontSize': '12px'}),
-            dcc.Slider(
-                id='rel-lag-sl',
-                min=10, max=500, step=10, value=100,
-                marks={10: '10', 100: '100', 250: '250', 500: '500'},
-                tooltip={'placement': 'bottom', 'always_visible': True},
-            ),
-        ], style={'width': '300px', 'padding': '0 0 8px'}),
+        html.H3("HYDROGEL_PACK — Return Autocorrelation",
+                style={'color': '#00e5ff', 'margin': '12px 0 4px', 'display': 'inline'}),
+        info_box("ACF = Autocorrelation Function. Measures how correlated price changes are with their own past. "
+                 "Lag k answers: 'does a move k ticks ago predict the current move?' "
+                 "Positive bar = momentum at that lag. Negative bar = mean reversion. "
+                 "Green bars exceed the 95% significance threshold — grey bars are likely noise."),
+        html.Br(),
+        html.Div(style={'display': 'flex', 'gap': '32px', 'flexWrap': 'wrap', 'padding': '8px 0'}, children=[
+            html.Div([
+                html.Label("Max lag (ticks)", style={'color': '#aaaaaa', 'fontSize': '12px'}),
+                dcc.Slider(
+                    id='rel-lag-sl',
+                    min=10, max=500, step=10, value=100,
+                    marks={10: '10', 100: '100', 250: '250', 500: '500'},
+                    tooltip={'placement': 'bottom', 'always_visible': True},
+                ),
+            ], style={'width': '300px'}),
+            html.Div([
+                html.Label("Rolling window (ticks)", style={'color': '#aaaaaa', 'fontSize': '12px'}),
+                dcc.Slider(
+                    id='acf-window-sl',
+                    min=1000, max=30000, step=1000, value=5000,
+                    marks={1000: '1k', 10000: '10k', 20000: '20k', 30000: '30k'},
+                    tooltip={'placement': 'bottom', 'always_visible': True},
+                ),
+            ], style={'width': '300px'}),
+        ]),
     ]),
-    dcc.Graph(id='rel-acf-chart', style={'height': '45vh', 'paddingBottom': '40px'}),
+    dcc.Graph(id='rel-acf-chart',     style={'height': '40vh'}),
+    html.Div(style={'padding': '4px 20px 0'}, children=[
+        html.H4("Rolling ACF Heatmap", style={'color': '#00e5ff', 'margin': '4px 0', 'display': 'inline'}),
+        info_box("Each column is the ACF computed over a rolling window centred at that timestamp. "
+                 "Red = strong positive autocorrelation (momentum) at that lag. "
+                 "Blue = strong negative autocorrelation (mean reversion). "
+                 "A consistent colour across all columns = stable structural signal worth trading. "
+                 "Colour that changes = regime-dependent, be careful."),
+    ]),
+    dcc.Graph(id='acf-heatmap', style={'height': '45vh', 'paddingBottom': '40px'}),
 ])
 
 
