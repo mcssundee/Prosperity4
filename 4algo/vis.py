@@ -215,8 +215,10 @@ def compute_shadow_pnl(product, px_df, focus_trader, mom_thr, obi_thr):
     if len(focus) == 0 or px_df is None or len(px_df) == 0:
         return pd.DataFrame(), pd.DataFrame()
 
-    px_ts  = px_df['timestamp'].values
-    px_mid = px_df['pop_mid'].values
+    px_ts   = px_df['timestamp'].values
+    px_mid  = px_df['pop_mid'].values
+    px_bid1 = px_df['bid_price_1'].values
+    px_ask1 = px_df['ask_price_1'].values
 
     bv    = px_df[['bid_volume_1', 'bid_volume_2', 'bid_volume_3']].fillna(0).sum(axis=1).values
     av    = px_df[['ask_volume_1', 'ask_volume_2', 'ask_volume_3']].fillna(0).sum(axis=1).values
@@ -233,11 +235,13 @@ def compute_shadow_pnl(product, px_df, focus_trader, mom_thr, obi_thr):
         qty = float(row['quantity'])
         direction = 1 if row['buyer'] == focus_trader else -1
 
-        # price we'd execute at (next tick after the observed trade)
+        # execute at the next tick's ask (if buying) or bid (if selling) — spread cost
         next_idx = int(np.searchsorted(px_ts, ts, side='right'))
         if next_idx >= len(px_ts):
             continue
-        exec_p = px_mid[next_idx]
+        exec_p = px_ask1[next_idx] if direction == 1 else px_bid1[next_idx]
+        if np.isnan(exec_p):
+            exec_p = px_mid[next_idx]  # fall back to mid if no quote
         if np.isnan(exec_p):
             continue
 
@@ -246,8 +250,8 @@ def compute_shadow_pnl(product, px_df, focus_trader, mom_thr, obi_thr):
         mom_val = mom[reg_idx]
         obi_val = obi[reg_idx]
 
-        # mark-to-market price at trade time
-        mtm = px_mid[reg_idx]
+        # mark-to-market using mid at execution tick
+        mtm = px_mid[next_idx]
 
         # blind copy
         b_cash -= direction * exec_p * qty
