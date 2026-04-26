@@ -285,6 +285,11 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
             html.Div(id='trade-table')
         ]),
     ]),
+
+    html.Div(style={'padding': '0 20px 20px'}, children=[
+        html.H4("PnL vs Lot Size", style={'color': '#00e5ff', 'margin': '8px 0 4px'}),
+        dcc.Graph(id='lotsize-chart', style={'height': '45vh'}),
+    ]),
 ])
 
 
