@@ -46,10 +46,11 @@ def run_trader(trader_path):
     for day in DAYS:
         offset = DAY_OFFSETS[day]
         trader = load_trader(trader_path)
-        cash, mtm, pnl_log, td = run_day(
-            trader, round_num=ROUND, day=day,
-            positions=pos, trader_data=td if day > 1 else ""
-        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            cash, mtm, pnl_log, td = run_day(
+                trader, round_num=ROUND, day=day,
+                positions=pos, trader_data=td if day > 1 else ""
+            )
 
         # Build running cash + position from pnl_log, matched with price data
         price_data = load_prices(ROUND, day)
