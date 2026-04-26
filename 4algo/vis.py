@@ -262,6 +262,17 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
 
     dcc.Graph(id='main-chart', style={'height': '60vh'}),
 
+    html.Div(style={'padding': '0 20px 4px', 'display': 'flex', 'alignItems': 'center', 'gap': '12px'}, children=[
+        html.H4("Trader PnL", style={'color': '#00e5ff', 'margin': 0}),
+        dcc.Checklist(
+            id='pnl-toggle',
+            options=[{'label': ' Show PnL curves', 'value': 'show'}],
+            value=[],
+            style={'color': '#aaaaaa', 'fontSize': '13px'},
+        ),
+    ]),
+    dcc.Graph(id='pnl-chart', style={'height': '40vh', 'display': 'none'}),
+
     html.Div(style={'display': 'flex', 'gap': '20px', 'padding': '0 20px 20px'}, children=[
 
         html.Div(style={'flex': '0 0 520px'}, children=[
