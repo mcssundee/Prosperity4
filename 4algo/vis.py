@@ -388,6 +388,44 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
         ]),
     ]),
     dcc.Graph(id='deepdive-chart', style={'height': '70vh', 'padding': '0 0 20px'}),
+
+    # ---- Shadow Strategy ----
+    html.Div(style={'padding': '0 20px 4px', 'borderTop': '1px solid #30363d', 'marginTop': '8px'}, children=[
+        html.H3("Shadow Strategy", style={'color': '#00e5ff', 'margin': '12px 0 4px'}),
+        html.P("Simulate copying a trader's trades one tick later — with and without a regime filter.",
+               style={'color': '#888', 'fontSize': '12px', 'margin': '0 0 10px'}),
+        html.Div(style={'display': 'flex', 'flexWrap': 'wrap', 'gap': '32px', 'alignItems': 'flex-start'}, children=[
+            html.Div([
+                html.Label("Copy Trader", style={'color': '#aaaaaa', 'fontSize': '12px'}),
+                dcc.Dropdown(
+                    id='shadow-trader-dd',
+                    options=[{'label': t, 'value': t} for t in ALL_TRADERS],
+                    value='Mark 14',
+                    clearable=False,
+                    style={'width': '200px', 'backgroundColor': '#161b22', 'color': '#000'},
+                ),
+            ]),
+            html.Div([
+                html.Label("Momentum filter  |mom| <", style={'color': '#aaaaaa', 'fontSize': '12px'}),
+                dcc.Slider(
+                    id='mom-thr-sl',
+                    min=10, max=300, step=10, value=80,
+                    marks={10: '10', 100: '100', 200: '200', 300: '300'},
+                    tooltip={'placement': 'bottom', 'always_visible': True},
+                ),
+            ], style={'width': '260px'}),
+            html.Div([
+                html.Label("OBI filter  |OBI| <", style={'color': '#aaaaaa', 'fontSize': '12px'}),
+                dcc.Slider(
+                    id='obi-thr-sl',
+                    min=0.05, max=1.0, step=0.05, value=0.3,
+                    marks={0.05: '0.05', 0.5: '0.5', 1.0: '1.0'},
+                    tooltip={'placement': 'bottom', 'always_visible': True},
+                ),
+            ], style={'width': '260px'}),
+        ]),
+    ]),
+    dcc.Graph(id='shadow-chart', style={'height': '45vh', 'padding': '0 0 20px'}),
 ])
 
 
