@@ -360,6 +360,91 @@ def update_pnl(product, selected_traders, ts_range, pnl_toggle):
 
 
 # ---------------------------------------------------------------------------
+# Lot-size vs PnL scatter
+# ---------------------------------------------------------------------------
+@app.callback(
+    Output('lotsize-chart', 'figure'),
+    Input('product-dd',  'value'),
+    Input('trader-dd',   'value'),
+    Input('lookback-sl', 'value'),
+)
+def update_lotsize(product, selected_traders, lookahead):
+    selected_traders = set(selected_traders or [])
+    px_prod = px_dict.get(product, px_spot)
+    pnl_data = compute_pnl(product, px_prod)
+    fwd = trader_forward_returns(product, lookahead)
+    tags = fwd['tag'].to_dict() if len(fwd) else {}
+
+    tr_prod = tr_all[tr_all['symbol'] == product]
+
+    TAG_COLOR = {'INFORMED': '#2ecc71', 'DUMB': '#e74c3c', 'MM': '#f1c40f', 'UNKNOWN': '#888888'}
+
+    rows = []
+    for trader, df in pnl_data.items():
+        if len(df) == 0:
+            continue
+        t_trades = tr_prod[(tr_prod['buyer'] == trader) | (tr_prod['seller'] == trader)]
+        avg_lot  = t_trades['quantity'].mean()
+        n_trades = len(t_trades)
+        final_pnl = df['pnl'].dropna().iloc[-1] if len(df['pnl'].dropna()) else 0
+        tag = tags.get(trader, 'UNKNOWN')
+        rows.append({'trader': trader, 'avg_lot': avg_lot, 'pnl': final_pnl,
+                     'n_trades': n_trades, 'tag': tag,
+                     'selected': trader in selected_traders})
+
+    fig = go.Figure()
+    if not rows:
+        return fig
+
+    df_scatter = pd.DataFrame(rows)
+
+    for tag, grp in df_scatter.groupby('tag'):
+        color = TAG_COLOR.get(tag, '#888888')
+        for _, row in grp.iterrows():
+            opacity = 1.0 if row['selected'] else 0.25
+            fig.add_trace(go.Scatter(
+                x=[row['avg_lot']], y=[row['pnl']],
+                mode='markers+text',
+                marker=dict(size=max(8, min(30, row['n_trades'] / 5)),
+                            color=color, opacity=opacity,
+                            line=dict(color='#ffffff' if row['selected'] else color, width=1)),
+                text=[row['trader']],
+                textposition='top center',
+                textfont=dict(size=9, color=color if row['selected'] else '#555555'),
+                name=tag,
+                legendgroup=tag,
+                showlegend=False,
+                hovertemplate=(
+                    f"<b>{row['trader']}</b><br>"
+                    f"Tag: {tag}<br>"
+                    f"Avg lot: {row['avg_lot']:.1f}<br>"
+                    f"PnL: {row['pnl']:.1f}<br>"
+                    f"Trades: {row['n_trades']}<extra></extra>"
+                ),
+            ))
+
+    # One legend entry per tag
+    for tag, color in TAG_COLOR.items():
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None], mode='markers',
+            marker=dict(size=10, color=color),
+            name=tag, legendgroup=tag, showlegend=True,
+        ))
+
+    fig.add_hline(y=0, line=dict(color='#555555', dash='dot', width=1))
+    fig.update_layout(
+        paper_bgcolor='#0d1117', plot_bgcolor='#161b22',
+        font=dict(color='#aaaaaa', family='monospace'),
+        legend=dict(bgcolor='#161b22', bordercolor='#30363d', font=dict(size=10)),
+        margin=dict(l=50, r=20, t=20, b=40),
+        hovermode='closest',
+        xaxis=dict(title='Avg Lot Size', gridcolor='#1f1f1f', zerolinecolor='#30363d'),
+        yaxis=dict(title='Total PnL (mark-to-market)', gridcolor='#1f1f1f', zerolinecolor='#30363d'),
+    )
+    return fig
+
+
+# ---------------------------------------------------------------------------
 # Main callback
 # ---------------------------------------------------------------------------
 @app.callback(
