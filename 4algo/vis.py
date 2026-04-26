@@ -271,8 +271,22 @@ def compute_shadow_pnl(product, px_df, focus_trader, mom_thr, obi_thr):
 
 
 # ---------------------------------------------------------------------------
-# App layout
+# App layout helpers
 # ---------------------------------------------------------------------------
+def info_box(text):
+    """Inline ⓘ that expands to show a description on click."""
+    return html.Details([
+        html.Summary("ⓘ", style={
+            'cursor': 'pointer', 'color': '#3498db', 'fontSize': '13px',
+            'userSelect': 'none', 'listStyle': 'none', 'display': 'inline',
+        }),
+        html.Span(text, style={
+            'color': '#aaaaaa', 'fontSize': '11px',
+            'marginLeft': '8px', 'fontStyle': 'italic',
+        }),
+    ], style={'display': 'inline-block', 'verticalAlign': 'middle', 'marginLeft': '8px'})
+
+
 app = dash.Dash(__name__)
 app.title = "IMC Trade Visualizer"
 
