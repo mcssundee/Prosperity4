@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backtesting'))
 os.chdir(os.path.join(os.path.dirname(__file__), '..'))
 
 from local_backtest import run_day, load_prices
+import io, contextlib
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import importlib.util
