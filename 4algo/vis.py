@@ -888,24 +888,18 @@ def update_relationship(max_lag, ts_range):
         )
 
     hydro = px_dict.get('HYDROGEL_PACK')
-    velv  = px_dict.get('VELVETFRUIT_EXTRACT')
     empty = go.Figure()
     empty.update_layout(**base_layout())
-    if hydro is None or velv is None:
-        return empty, empty
+    if hydro is None:
+        return empty
 
-    h = hydro[['timestamp', 'pop_mid']].rename(columns={'pop_mid': 'hydro'})
-    v = velv[['timestamp',  'pop_mid']].rename(columns={'pop_mid': 'velv'})
-    df = pd.merge_asof(h.sort_values('timestamp'),
-                       v.sort_values('timestamp'),
-                       on='timestamp', direction='nearest').dropna()
+    df = hydro[['timestamp', 'pop_mid']].copy()
     df = df[(df['timestamp'] >= start) & (df['timestamp'] <= end)].reset_index(drop=True)
 
     if len(df) < max_lag + 10:
-        return empty, empty
+        return empty
 
-    h_ret = np.diff(df['hydro'].values, prepend=df['hydro'].values[0])
-    v_ret = np.diff(df['velv'].values,  prepend=df['velv'].values[0])
+    h_ret = np.diff(df['pop_mid'].values, prepend=df['pop_mid'].values[0])
     sig   = 1.96 / np.sqrt(len(df))
     lags  = list(range(1, max_lag + 1))
 
