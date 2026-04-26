@@ -869,7 +869,6 @@ def update(product, selected_traders, ts_range, lookahead):
 # ---------------------------------------------------------------------------
 @app.callback(
     Output('rel-acf-chart', 'figure'),
-    Output('rel-ccf-chart', 'figure'),
     Input('rel-lag-sl', 'value'),
     Input('ts-slider',  'value'),
 )
