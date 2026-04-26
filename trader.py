@@ -176,10 +176,10 @@ class Trader:
         result      = []
         pos_lim     = 200
         quote_size  = 15     # units per passive quote
-        half_spread = 6      # base quote offset from fair value
-        skew_rate   = 0.50   # shift quotes by skew_rate * position
+        half_spread = 4      # base quote offset from fair value
+        skew_rate   = 0.40   # shift quotes by skew_rate * position
         fv_window   = 20     # rolling mid prices (= 2,000 ticks)
-        unwind_thr  = 80     # aggressively unwind if |pos| exceeds this
+        unwind_thr  = 40     # aggressively unwind if |pos| exceeds this
 
         mid_hist = shared.get('hp_mid_hist', [])
 
