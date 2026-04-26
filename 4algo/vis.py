@@ -156,6 +156,49 @@ TRADER_COLOR = {t: PALETTE[i % len(PALETTE)] for i, t in enumerate(ALL_TRADERS)}
 
 
 # ---------------------------------------------------------------------------
+# PnL helper
+# ---------------------------------------------------------------------------
+def compute_pnl(product, px_df):
+    """Return dict of trader -> DataFrame(timestamp, pnl) using mark-to-market."""
+    tr = tr_all[tr_all['symbol'] == product].sort_values('timestamp').reset_index(drop=True)
+    if len(tr) == 0 or px_df is None or len(px_df) == 0:
+        return {}
+
+    px_ts  = px_df['timestamp'].values
+    px_mid = px_df['pop_mid'].values
+
+    traders = sorted(set(tr['buyer'].dropna()) | set(tr['seller'].dropna()))
+    result  = {}
+
+    for trader in traders:
+        mask   = (tr['buyer'] == trader) | (tr['seller'] == trader)
+        t_rows = tr[mask]
+        if len(t_rows) == 0:
+            continue
+
+        cash, pos = 0.0, 0.0
+        records   = []
+        for _, row in t_rows.iterrows():
+            qty = float(row['quantity'])
+            prc = float(row['price'])
+            if row['buyer'] == trader:
+                cash -= prc * qty
+                pos  += qty
+            else:
+                cash += prc * qty
+                pos  -= qty
+            idx = np.searchsorted(px_ts, row['timestamp'], side='right') - 1
+            idx = max(0, min(idx, len(px_mid) - 1))
+            mtm = px_mid[idx]
+            records.append({'timestamp': row['timestamp'],
+                            'pnl': cash + pos * mtm if not np.isnan(mtm) else np.nan})
+
+        result[trader] = pd.DataFrame(records)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # App layout
 # ---------------------------------------------------------------------------
 app = dash.Dash(__name__)
