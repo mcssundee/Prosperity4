@@ -1051,5 +1051,137 @@ def update_relationship(max_lag, window, ts_range):
     return fig_acf, fig_heat
 
 
+# ---------------------------------------------------------------------------
+# HYDROGEL price structure callback
+# ---------------------------------------------------------------------------
+@app.callback(
+    Output('hydro-price-chart', 'figure'),
+    Output('hydro-dist-chart',  'figure'),
+    Input('fv-window-sl', 'value'),
+)
+def update_hydro_price(fv_window_ticks):
+    GRID = '#1f1f1f'
+    ZERO = '#30363d'
+
+    def base_layout(title=''):
+        return dict(
+            paper_bgcolor='#0d1117', plot_bgcolor='#161b22',
+            font=dict(color='#aaaaaa', family='monospace'),
+            legend=dict(bgcolor='#161b22', bordercolor='#30363d', font=dict(size=10)),
+            margin=dict(l=60, r=20, t=35, b=40),
+            title=dict(text=title, font=dict(color='#00e5ff', size=12)),
+        )
+
+    hydro = px_dict.get('HYDROGEL_PACK')
+    empty = go.Figure()
+    empty.update_layout(**base_layout())
+    if hydro is None:
+        return empty, empty
+
+    df = hydro[['timestamp', 'pop_mid', 'bid_price_1', 'ask_price_1']].copy()
+
+    # rolling fair value (in rows; prices every 100 ticks)
+    win_rows = max(10, fv_window_ticks // 100)
+    df['fair_value'] = df['pop_mid'].rolling(win_rows, center=True, min_periods=1).mean()
+    df['deviation']  = df['pop_mid'] - df['fair_value']
+    df['spread']     = df['ask_price_1'] - df['bid_price_1']
+
+    # day boundary lines
+    day_lines = [1_000_000, 2_000_000]
+
+    # ---- Time-series figure ----
+    fig_ts = make_subplots(
+        rows=3, cols=1, shared_xaxes=True,
+        row_heights=[0.5, 0.25, 0.25],
+        vertical_spacing=0.04,
+        subplot_titles=[
+            'Price  (pop_mid + rolling fair value)',
+            'Deviation from fair value',
+            'Bid-ask spread',
+        ],
+    )
+
+    # Row 1: price + fair value
+    fig_ts.add_trace(go.Scatter(
+        x=df['timestamp'], y=df['pop_mid'],
+        mode='lines', line=dict(color='#7c9ef5', width=1),
+        name='pop_mid', showlegend=True,
+        hovertemplate='Price: %{y:.2f}<extra></extra>',
+    ), row=1, col=1)
+    fig_ts.add_trace(go.Scatter(
+        x=df['timestamp'], y=df['fair_value'],
+        mode='lines', line=dict(color='#f1c40f', width=1.5, dash='dash'),
+        name=f'Fair value (rolling {fv_window_ticks:,}-tick mean)',
+        hovertemplate='Fair value: %{y:.2f}<extra></extra>',
+    ), row=1, col=1)
+
+    # Row 2: deviation with ±1σ band
+    dev_std = df['deviation'].std()
+    fig_ts.add_trace(go.Scatter(
+        x=df['timestamp'], y=df['deviation'],
+        mode='lines', line=dict(color='#e67e22', width=1),
+        name='Deviation', showlegend=False,
+        hovertemplate='Deviation: %{y:.2f}<extra></extra>',
+    ), row=2, col=1)
+    for lvl, col in [(dev_std, '#555'), (-dev_std, '#555'), (2*dev_std, '#e74c3c'), (-2*dev_std, '#e74c3c')]:
+        fig_ts.add_hline(y=lvl, line=dict(color=col, dash='dot', width=1), row=2, col=1)
+    fig_ts.add_hline(y=0, line=dict(color=ZERO, dash='dot', width=1), row=2, col=1)
+
+    # Row 3: spread
+    fig_ts.add_trace(go.Scatter(
+        x=df['timestamp'], y=df['spread'],
+        mode='lines', line=dict(color='#2ecc71', width=1),
+        name='Spread', showlegend=False,
+        hovertemplate='Spread: %{y:.2f}<extra></extra>',
+    ), row=3, col=1)
+
+    # Day boundary markers
+    for d in day_lines:
+        for row in [1, 2, 3]:
+            fig_ts.add_vline(x=d, line=dict(color='#444', dash='dot', width=1), row=row, col=1)
+
+    dev_mean = df['deviation'].mean()
+    fig_ts.update_layout(
+        **base_layout(
+            f'HYDROGEL_PACK — full 3-day price   '
+            f'deviation σ={dev_std:.2f}   mean={dev_mean:.2f}'
+        ),
+        hovermode='x unified',
+    )
+    fig_ts.update_xaxes(gridcolor=GRID, zerolinecolor=ZERO)
+    fig_ts.update_yaxes(gridcolor=GRID, zerolinecolor=ZERO)
+    fig_ts.update_yaxes(title_text='Price',     row=1, col=1)
+    fig_ts.update_yaxes(title_text='Deviation', row=2, col=1)
+    fig_ts.update_yaxes(title_text='Spread',    row=3, col=1)
+    fig_ts.update_xaxes(title_text='Timestamp', row=3, col=1)
+    fig_ts.update_annotations(font_color='#00e5ff', font_size=11)
+
+    # ---- Distribution figure ----
+    fig_dist = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=['Price distribution', 'Deviation distribution'],
+        horizontal_spacing=0.1,
+    )
+    fig_dist.add_trace(go.Histogram(
+        x=df['pop_mid'].dropna(), nbinsx=80,
+        marker_color='#7c9ef5', opacity=0.8,
+        name='Price', showlegend=False,
+        hovertemplate='Price: %{x:.1f}<br>Count: %{y}<extra></extra>',
+    ), row=1, col=1)
+    fig_dist.add_trace(go.Histogram(
+        x=df['deviation'].dropna(), nbinsx=80,
+        marker_color='#e67e22', opacity=0.8,
+        name='Deviation', showlegend=False,
+        hovertemplate='Deviation: %{x:.2f}<br>Count: %{y}<extra></extra>',
+    ), row=1, col=2)
+    fig_dist.update_layout(
+        **base_layout('Price & deviation distributions — narrow bell = stable fair value; fat tails = occasional large dislocations'),
+    )
+    fig_dist.update_xaxes(gridcolor=GRID, zerolinecolor=ZERO)
+    fig_dist.update_yaxes(gridcolor=GRID, zerolinecolor=ZERO)
+
+    return fig_ts, fig_dist
+
+
 if __name__ == '__main__':
     app.run(debug=False, port=8050)
