@@ -174,11 +174,11 @@ class Trader:
         product     = 'HYDROGEL_PACK'
         result      = []
         pos_lim     = 200
-        quote_size  = 25     # per level
+        quote_size  = 50     # per level
         half_spread = 4      # quote at fair ± half_spread
         fv_window   = 20     # rolling mid prices (= 2,000 ticks)
-        flat_thr    = 25     # quote both sides when |pos| < flat_thr
-        unwind_thr  = 80     # cross spread when |pos| > unwind_thr
+        flat_thr    = 120    # quote both sides when |pos| < flat_thr
+        unwind_thr  = 175    # cross spread when |pos| > unwind_thr
 
         mid_hist = shared.get('hp_mid_hist', [])
 
