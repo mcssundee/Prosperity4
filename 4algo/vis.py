@@ -373,6 +373,8 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
 
         html.Div(style={'flex': '0 0 520px'}, children=[
             html.H4("Trader Classification", style={'color': '#00e5ff', 'margin': '8px 0 4px'}),
+            info_box("Traders ranked by mean signed forward return over the lookback window. "
+                     "INFORMED = consistently profits from direction; DUMB = loses; MM = earns spread passively; UNKNOWN = too few trades."),
             html.Div(id='tag-table')
         ]),
 
