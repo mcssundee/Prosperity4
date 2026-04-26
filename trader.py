@@ -169,45 +169,65 @@ class Trader:
         return result, conversions, traderData
 
     # ------------------------------------------------------------------
-    # HYDROGEL_PACK — mean-reversion MM around 10000
+    # HYDROGEL_PACK — dynamic fair-value MM with inventory skew
     # ------------------------------------------------------------------
     def hydrogel(self, state: TradingState, shared: dict):
-        product = 'HYDROGEL_PACK'
-        result = []
-        pos_lim = 200
-        quote_lim = 15
-        fair = 10000
+        product    = 'HYDROGEL_PACK'
+        result     = []
+        pos_lim    = 200
+        quote_size = 15       # units per passive quote
+        half_spread = 5       # quote at fair ± half_spread (10-pt round-trip capture)
+        skew_rate  = 0.08     # shift quotes by skew_rate * position (tightens toward 0)
+        fv_window  = 100      # rolling mid prices to average (= 10,000 ticks)
+
+        mid_hist = shared.get('hp_mid_hist', [])
 
         if product not in state.order_depths:
-            return result, {}
+            return result, {'hp_mid_hist': mid_hist}
 
-        od = state.order_depths[product]
-        pos = state.position.get(product, 0)
+        od   = state.order_depths[product]
+        pos  = state.position.get(product, 0)
         bids = sorted(od.buy_orders, reverse=True)
         asks = sorted(od.sell_orders)
 
-        buy_cap = pos_lim - pos
+        best_bid = bids[0] if bids else None
+        best_ask = asks[0] if asks else None
+
+        # Update rolling fair value
+        if best_bid is not None and best_ask is not None:
+            mid_hist.append((best_bid + best_ask) / 2.0)
+        if len(mid_hist) > fv_window:
+            mid_hist = mid_hist[-fv_window:]
+
+        fair = round(sum(mid_hist) / len(mid_hist)) if mid_hist else 10000
+
+        buy_cap  = pos_lim - pos
         sell_cap = pos_lim + pos
 
-        # Active take
+        # Inventory skew: positive pos → shift both quotes down to encourage selling
+        skew     = int(pos * skew_rate)
+        bid_px   = fair - half_spread - skew
+        ask_px   = fair + half_spread - skew
+
+        # Active take: cross only if quote is clearly mispriced vs fair value
         for ask in asks:
-            if ask < fair and buy_cap > 0:
+            if ask < fair - half_spread and buy_cap > 0:
                 qty = min(buy_cap, abs(od.sell_orders[ask]))
                 result.append(Order(product, ask, qty))
                 buy_cap -= qty
         for bid in bids:
-            if bid > fair and sell_cap > 0:
+            if bid > fair + half_spread and sell_cap > 0:
                 qty = min(sell_cap, od.buy_orders[bid])
                 result.append(Order(product, bid, -qty))
                 sell_cap -= qty
 
         # Passive make
         if buy_cap > 0:
-            result.append(Order(product, fair - 1, min(quote_lim, buy_cap)))
+            result.append(Order(product, bid_px, min(quote_size, buy_cap)))
         if sell_cap > 0:
-            result.append(Order(product, fair + 1, -min(quote_lim, sell_cap)))
+            result.append(Order(product, ask_px, -min(quote_size, sell_cap)))
 
-        return result, {}
+        return result, {'hp_mid_hist': mid_hist}
 
     # ------------------------------------------------------------------
     # VELVETFRUIT_EXTRACT — SMA-5 market maker
