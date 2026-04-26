@@ -47,7 +47,10 @@
       "Bash(pip3 show *)",
       "Read(//opt/homebrew/**)",
       "Bash(python3.11 -m prosperity4bt --help)",
-      "Bash(python3.11 -m prosperity4bt /Users/Guan/Prosperity4/round4/algo/get_mark38_test.py 4 --data /Users/Guan/Prosperity4/data --no-out --no-progress)"
+      "Bash(python3.11 -m prosperity4bt /Users/Guan/Prosperity4/round4/algo/get_mark38_test.py 4 --data /Users/Guan/Prosperity4/data --no-out --no-progress)",
+      "Bash(python3.11 *)",
+      "Bash(/Users/Guan/.local/share/uv/tools/prosperity4btx/bin/prosperity4btx --help)",
+      "Bash(/Users/Guan/.local/share/uv/tools/prosperity4btx/bin/prosperity4btx *)"
     ]
   }
 }
