@@ -358,6 +358,8 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
 
     html.Div(style={'padding': '0 20px 4px', 'display': 'flex', 'alignItems': 'center', 'gap': '12px'}, children=[
         html.H4("Trader PnL", style={'color': '#00e5ff', 'margin': 0}),
+        info_box("Mark-to-market PnL over time for each selected trader on the chosen product. "
+                 "Cash flows from trades + current position × mid price."),
         dcc.Checklist(
             id='pnl-toggle',
             options=[{'label': ' Show PnL curves', 'value': 'show'}],
