@@ -987,20 +987,22 @@ def update_relationship(max_lag, window, ts_range):
         yaxis=dict(title='Autocorrelation', gridcolor=GRID, zerolinecolor=ZERO),
     )
 
-    # ---- Rolling ACF heatmap ----
-    step     = max(1, window // 20)   # ~20 columns per window width
-    ts_vals  = df['timestamp'].values
-    n        = len(h_ret)
-    centers  = []
-    acf_mat  = []   # rows = lags, cols = time windows
+    # ---- Rolling ACF heatmap — always uses full 3-day dataset ----
+    hydro_full  = hydro[['timestamp', 'pop_mid']].copy().reset_index(drop=True)
+    h_ret_full  = np.diff(hydro_full['pop_mid'].values, prepend=hydro_full['pop_mid'].values[0])
+    ts_full     = hydro_full['timestamp'].values
+    n_full      = len(h_ret_full)
+    # convert window from ticks to rows (prices every 100 ticks)
+    win_rows    = max(max_lag + 20, window // 100)
+    step_rows   = max(1, win_rows // 30)   # ~30 columns per window
+    centers     = []
+    acf_mat     = []
 
-    for i in range(0, n - window, step):
-        chunk = h_ret[i:i + window]
-        if len(chunk) < max_lag + 10:
-            continue
+    for i in range(0, n_full - win_rows, step_rows):
+        chunk = h_ret_full[i:i + win_rows]
         row = [np.corrcoef(chunk[k:], chunk[:-k])[0, 1] for k in lags]
         acf_mat.append(row)
-        centers.append(int(ts_vals[min(i + window // 2, n - 1)]))
+        centers.append(int(ts_full[min(i + win_rows // 2, n_full - 1)]))
 
     if acf_mat:
         z = np.array(acf_mat).T   # shape: (n_lags, n_windows)
