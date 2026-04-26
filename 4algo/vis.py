@@ -1021,7 +1021,66 @@ def update_relationship(window, max_lag, ts_range):
         yaxis=dict(title='HYDROGEL_PACK pop_mid',       gridcolor=GRID, zerolinecolor=ZERO),
     )
 
-    return fig_ts, fig_sc
+    # ---- Cross-correlation figure ----
+    # Compute CCF for price levels and for returns at each lag
+    h_vals = df['hydro'].values
+    v_vals = df['velv'].values
+    h_ret  = np.diff(h_vals, prepend=h_vals[0])
+    v_ret  = np.diff(v_vals, prepend=v_vals[0])
+
+    lags = list(range(-max_lag, max_lag + 1))
+    ccf_levels  = []
+    ccf_returns = []
+    # significance threshold (approx 95% for white noise)
+    sig = 1.96 / np.sqrt(len(df))
+
+    for lag in lags:
+        if lag == 0:
+            ccf_levels.append(np.corrcoef(h_vals, v_vals)[0, 1])
+            ccf_returns.append(np.corrcoef(h_ret, v_ret)[0, 1])
+        elif lag > 0:
+            # positive lag: VELVET leads HYDRO by `lag` ticks
+            ccf_levels.append(np.corrcoef(h_vals[lag:], v_vals[:-lag])[0, 1])
+            ccf_returns.append(np.corrcoef(h_ret[lag:], v_ret[:-lag])[0, 1])
+        else:
+            # negative lag: HYDRO leads VELVET
+            l = -lag
+            ccf_levels.append(np.corrcoef(h_vals[:-l], v_vals[l:])[0, 1])
+            ccf_returns.append(np.corrcoef(h_ret[:-l], v_ret[l:])[0, 1])
+
+    fig_ccf = make_subplots(
+        rows=2, cols=1,
+        vertical_spacing=0.12,
+        subplot_titles=[
+            'Cross-correlation — price levels  (positive lag = VELVET leads HYDRO)',
+            'Cross-correlation — price CHANGES/returns',
+        ],
+    )
+
+    bar_colors_l = ['#e74c3c' if abs(c) > sig else '#3a3a5c' for c in ccf_levels]
+    bar_colors_r = ['#2ecc71' if abs(c) > sig else '#3a3a5c' for c in ccf_returns]
+
+    fig_ccf.add_trace(go.Bar(x=lags, y=ccf_levels,
+        marker_color=bar_colors_l, name='Levels CCF', showlegend=False,
+        hovertemplate='Lag %{x}: corr=%{y:.4f}<extra></extra>'), row=1, col=1)
+    fig_ccf.add_hline(y=sig,  line=dict(color='#ffffff', dash='dot', width=1), row=1, col=1)
+    fig_ccf.add_hline(y=-sig, line=dict(color='#ffffff', dash='dot', width=1), row=1, col=1)
+
+    fig_ccf.add_trace(go.Bar(x=lags, y=ccf_returns,
+        marker_color=bar_colors_r, name='Returns CCF', showlegend=False,
+        hovertemplate='Lag %{x}: corr=%{y:.4f}<extra></extra>'), row=2, col=1)
+    fig_ccf.add_hline(y=sig,  line=dict(color='#ffffff', dash='dot', width=1), row=2, col=1)
+    fig_ccf.add_hline(y=-sig, line=dict(color='#ffffff', dash='dot', width=1), row=2, col=1)
+
+    fig_ccf.update_layout(
+        **base_layout(f'Cross-correlation  (dotted lines = 95% significance threshold ±{sig:.4f})'),
+        bargap=0.1,
+    )
+    fig_ccf.update_xaxes(title_text='Lag (ticks)', gridcolor=GRID, zerolinecolor='#888')
+    fig_ccf.update_yaxes(title_text='Correlation', gridcolor=GRID, zerolinecolor=ZERO)
+    fig_ccf.update_annotations(font_color='#00e5ff', font_size=11)
+
+    return fig_ts, fig_sc, fig_ccf
 
 
 if __name__ == '__main__':
