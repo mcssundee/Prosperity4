@@ -11,6 +11,8 @@
 cd "$(dirname "$0")/.." || exit 1
 
 REPO="$(pwd)/backtesting/prosperity4bt_repo"
-export PYTHONPATH="$REPO:$PYTHONPATH"
+# Include both the repo root (for 'prosperity4bt' package) and the inner package
+# dir so 'from datamodel import ...' in trader.py resolves correctly.
+export PYTHONPATH="$REPO:$REPO/prosperity4bt:$PYTHONPATH"
 
 python3 -m prosperity4bt "$@"
