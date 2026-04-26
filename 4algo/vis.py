@@ -868,5 +868,149 @@ def update(product, selected_traders, ts_range, lookahead):
     return fig, tag_tbl, trade_tbl
 
 
+# ---------------------------------------------------------------------------
+# Relationship analysis callback
+# ---------------------------------------------------------------------------
+@app.callback(
+    Output('rel-ts-chart',      'figure'),
+    Output('rel-scatter-chart', 'figure'),
+    Input('rel-window-sl', 'value'),
+    Input('ts-slider',     'value'),
+)
+def update_relationship(window, ts_range):
+    start, end = ts_range
+
+    hydro = px_dict.get('HYDROGEL_PACK')
+    velv  = px_dict.get('VELVETFRUIT_EXTRACT')
+    if hydro is None or velv is None:
+        empty = go.Figure()
+        return empty, empty
+
+    # Align on timestamp via merge_asof
+    h = hydro[['timestamp', 'pop_mid']].rename(columns={'pop_mid': 'hydro'})
+    v = velv[['timestamp',  'pop_mid']].rename(columns={'pop_mid': 'velv'})
+    df = pd.merge_asof(h.sort_values('timestamp'),
+                       v.sort_values('timestamp'),
+                       on='timestamp', direction='nearest').dropna()
+    df = df[(df['timestamp'] >= start) & (df['timestamp'] <= end)].reset_index(drop=True)
+
+    if len(df) < 50:
+        empty = go.Figure()
+        return empty, empty
+
+    # OLS beta and intercept over full window
+    beta, intercept = np.polyfit(df['velv'], df['hydro'], 1)
+
+    # Derived series
+    df['hydro_norm'] = df['hydro'] / df['hydro'].iloc[0] * 100
+    df['velv_norm']  = df['velv']  / df['velv'].iloc[0]  * 100
+    df['spread']     = df['hydro'] - (beta * df['velv'] + intercept)
+    spread_mean      = df['spread'].rolling(window).mean()
+    spread_std       = df['spread'].rolling(window).std().replace(0, np.nan)
+    df['zscore']     = (df['spread'] - spread_mean) / spread_std
+    df['rolling_corr'] = df['hydro'].rolling(window).corr(df['velv'])
+    df['ratio']      = df['hydro'] / df['velv']
+
+    GRID = '#1f1f1f'
+    ZERO = '#30363d'
+
+    def base_layout(title=''):
+        return dict(
+            paper_bgcolor='#0d1117', plot_bgcolor='#161b22',
+            font=dict(color='#aaaaaa', family='monospace'),
+            legend=dict(bgcolor='#161b22', bordercolor='#30363d', font=dict(size=10)),
+            margin=dict(l=60, r=20, t=35, b=20),
+            hovermode='x unified',
+            title=dict(text=title, font=dict(color='#00e5ff', size=12)),
+        )
+
+    # ---- Time-series figure (4 rows) ----
+    fig_ts = make_subplots(
+        rows=4, cols=1, shared_xaxes=True,
+        row_heights=[0.3, 0.25, 0.25, 0.2],
+        vertical_spacing=0.04,
+        subplot_titles=[
+            'Normalised prices (indexed to 100)',
+            f'Residual spread  (HYDRO − {beta:.3f}×VELV)',
+            'Spread z-score  (mean-reversion signal)',
+            f'Rolling correlation  (window={window:,})',
+        ],
+    )
+
+    # Row 1: normalised prices
+    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['hydro_norm'],
+        mode='lines', line=dict(color='#2ecc71', width=1.5), name='HYDROGEL_PACK'), row=1, col=1)
+    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['velv_norm'],
+        mode='lines', line=dict(color='#7c9ef5', width=1.5), name='VELVETFRUIT_EXTRACT'), row=1, col=1)
+
+    # Row 2: residual spread + ±1σ bands
+    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['spread'],
+        mode='lines', line=dict(color='#f1c40f', width=1), name='Spread', showlegend=False), row=2, col=1)
+    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=spread_mean + spread_std,
+        mode='lines', line=dict(color='#555', width=1, dash='dot'), name='+1σ', showlegend=False), row=2, col=1)
+    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=spread_mean - spread_std,
+        mode='lines', line=dict(color='#555', width=1, dash='dot'), name='−1σ', showlegend=False,
+        fill='tonexty', fillcolor='rgba(255,255,255,0.03)'), row=2, col=1)
+    fig_ts.add_hline(y=0, line=dict(color=ZERO, dash='dot', width=1), row=2, col=1)
+
+    # Row 3: z-score
+    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['zscore'],
+        mode='lines', line=dict(color='#e67e22', width=1), name='Z-score', showlegend=False), row=3, col=1)
+    for lvl, col in [(2, '#e74c3c'), (-2, '#2ecc71'), (1, '#555'), (-1, '#555')]:
+        fig_ts.add_hline(y=lvl, line=dict(color=col, dash='dot', width=1), row=3, col=1)
+
+    # Row 4: rolling correlation
+    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['rolling_corr'],
+        mode='lines', line=dict(color='#9b59b6', width=1.5), name='Corr', showlegend=False), row=4, col=1)
+    fig_ts.add_hline(y=0, line=dict(color=ZERO, dash='dot', width=1), row=4, col=1)
+
+    full_corr = df['hydro'].corr(df['velv'])
+    fig_ts.update_layout(**base_layout(
+        f'Full-window correlation: {full_corr:.4f}   |   OLS β={beta:.4f}   intercept={intercept:.2f}'
+    ))
+    fig_ts.update_xaxes(gridcolor=GRID, zerolinecolor=ZERO)
+    fig_ts.update_yaxes(gridcolor=GRID, zerolinecolor=ZERO)
+    fig_ts.update_yaxes(title_text='Index',   row=1, col=1)
+    fig_ts.update_yaxes(title_text='Spread',  row=2, col=1)
+    fig_ts.update_yaxes(title_text='Z',       row=3, col=1)
+    fig_ts.update_yaxes(title_text='Corr',    row=4, col=1)
+    fig_ts.update_xaxes(title_text='Timestamp', row=4, col=1)
+    fig_ts.update_annotations(font_color='#00e5ff', font_size=11)
+
+    # ---- Scatter figure ----
+    # Colour points by zscore so you can see regime
+    zscore_vals = df['zscore'].fillna(0).clip(-3, 3)
+    fig_sc = go.Figure()
+    fig_sc.add_trace(go.Scatter(
+        x=df['velv'], y=df['hydro'],
+        mode='markers',
+        marker=dict(
+            size=3, opacity=0.6,
+            color=zscore_vals,
+            colorscale='RdYlGn',
+            cmin=-2, cmax=2,
+            colorbar=dict(title='Z-score', thickness=12,
+                          tickfont=dict(color='#aaaaaa', size=10)),
+        ),
+        name='Price points',
+        hovertemplate='VELV: %{x:.1f}<br>HYDRO: %{y:.1f}<extra></extra>',
+    ))
+    # OLS regression line
+    x_range = np.linspace(df['velv'].min(), df['velv'].max(), 200)
+    fig_sc.add_trace(go.Scatter(
+        x=x_range, y=beta * x_range + intercept,
+        mode='lines', line=dict(color='#e74c3c', width=2, dash='dash'),
+        name=f'OLS  y={beta:.4f}x + {intercept:.2f}',
+    ))
+    r2 = df['hydro'].corr(df['velv']) ** 2
+    fig_sc.update_layout(
+        **base_layout(f'Scatter — R²={r2:.4f}   β={beta:.4f}'),
+        xaxis=dict(title='VELVETFRUIT_EXTRACT pop_mid', gridcolor=GRID, zerolinecolor=ZERO),
+        yaxis=dict(title='HYDROGEL_PACK pop_mid',       gridcolor=GRID, zerolinecolor=ZERO),
+    )
+
+    return fig_ts, fig_sc
+
+
 if __name__ == '__main__':
     app.run(debug=False, port=8050)
