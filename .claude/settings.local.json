@@ -40,7 +40,9 @@
       "Bash(cp backtests/round3/current_best.py rounds/round3/algo/trader_optimised.py)",
       "Bash(sed -i '' 's/SPOT_ACTIVE_THR = 2.0/SPOT_ACTIVE_THR = 5.0/' rounds/round3/algo/trader_optimised.py)",
       "Bash(sed -i '' 's/SPOT_QUOTE_LIMIT = 15/SPOT_QUOTE_LIMIT = 38/' rounds/round3/algo/trader_optimised.py)",
-      "Bash(sed -i '' 's/HYDRO_STEP_SIZE  = 20/HYDRO_STEP_SIZE  = 10/' rounds/round3/algo/trader_optimised.py)"
+      "Bash(sed -i '' 's/HYDRO_STEP_SIZE  = 20/HYDRO_STEP_SIZE  = 10/' rounds/round3/algo/trader_optimised.py)",
+      "Bash(ollama rm *)",
+      "Bash(ollama pull *)"
     ]
   }
 }

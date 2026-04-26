@@ -1,5 +1,5 @@
 {
-  "enabledMcpjsonServers": ["github"],
+  "enabledMcpjsonServers": [],
   "model": "claude-sonnet-4-6",
   "effortLevel": "medium",
   "permissions": {

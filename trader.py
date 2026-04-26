@@ -31,7 +31,7 @@ class Logger:
             [[o.symbol, o.price, o.quantity] for arr in orders.values() for o in arr],
             conversions,
             trader_data,
-            self.logs,
+            self.logs,  
         ], separators=(",", ":")))
         self.logs = ""
 
