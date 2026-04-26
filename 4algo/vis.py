@@ -387,7 +387,10 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
 
     # ---- Trader Deep Dive ----
     html.Div(style={'padding': '0 20px 4px', 'borderTop': '1px solid #30363d', 'marginTop': '8px'}, children=[
-        html.H3("Trader Deep Dive", style={'color': '#00e5ff', 'margin': '12px 0 8px'}),
+        html.H3("Trader Deep Dive", style={'color': '#00e5ff', 'margin': '12px 0 4px', 'display': 'inline'}),
+        info_box("Pick one trader and overlay their PnL with market metrics to find what conditions "
+                 "cause them to make or lose money."),
+        html.Br(),
         html.Div(style={'display': 'flex', 'flexWrap': 'wrap', 'gap': '32px', 'alignItems': 'flex-start'}, children=[
             html.Div([
                 html.Label("Focus Trader", style={'color': '#aaaaaa', 'fontSize': '12px'}),
