@@ -59,11 +59,11 @@ class Trader:
         product     = 'HYDROGEL_PACK'
         result      = []
         pos_lim     = 200
-        quote_size  = 8
+        quote_size  = 25     # per level
         half_spread = 4
         fv_window   = 20
-        flat_thr    = 8
-        unwind_thr  = 30
+        flat_thr    = 25     # quote both sides when |pos| < flat_thr
+        unwind_thr  = 80     # cross spread when |pos| > unwind_thr
 
         mid_hist = shared.get('hp_mid_hist', [])
 
