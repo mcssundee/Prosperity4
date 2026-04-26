@@ -61,8 +61,8 @@ class Trader:
         pos_lim = 200
         quote_size = 8
         # How far from CENTER before we lean harder on inventory skew
-        inv_skew_div = 20   # 1 tick per 20 units of position
-        mr_skew_div  = 25   # 1 tick per 25 units deviation from CENTER
+        inv_skew_div = 30   # 1 tick per 30 units of position
+        mr_skew_div  = 20   # 1 tick per 20 units deviation from CENTER
 
         last_m38_ts = shared.get('last_m38_ts', state.timestamp)
 
