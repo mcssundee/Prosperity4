@@ -410,6 +410,21 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
                     value=[],
                     style={'color': '#c9d1d9', 'fontSize': '13px', 'lineHeight': '2'},
                 ),
+                html.Div(style={'marginTop': '8px'}, children=[
+                    info_box("Bid-Ask Spread: ask_price_1 − bid_price_1. Wide = more MM profit opportunity."),
+                    html.Br(),
+                    info_box("OBI (Order Book Imbalance): (total bid vol − total ask vol) / total vol. "
+                             "Ranges −1 to +1. Strong positive = buy pressure; negative = sell pressure. Predicts short-term price direction."),
+                    html.Br(),
+                    info_box("Price Momentum: rolling price change over last 500 ticks. "
+                             "Large positive = sustained uptrend; negative = downtrend. MMs lose when momentum is strong."),
+                    html.Br(),
+                    info_box("Net Position: trader's running inventory (buys − sells). "
+                             "Large position = exposed to adverse price moves."),
+                    html.Br(),
+                    info_box("Informed Flow: number of trades per time bucket involving INFORMED-tagged traders. "
+                             "Spikes here mean smart money is active — MMs often lose when this is high."),
+                ]),
             ]),
         ]),
     ]),
