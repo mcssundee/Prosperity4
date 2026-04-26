@@ -6,3 +6,6 @@ The position limits are
 HYDROGEL_PACK: 200
 VELVETFRUIT_EXTRACT: 200
 VELVETFRUIT_EXTRACT_VOUCHER: 300 for each of the 10 vouchers.
+
+
+
