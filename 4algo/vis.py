@@ -926,36 +926,7 @@ def update_relationship(max_lag, ts_range):
         yaxis=dict(title='Autocorrelation', gridcolor=GRID, zerolinecolor=ZERO),
     )
 
-    # ---- CCF: HYDROGEL returns vs VELVET returns (positive lag = VELVET leads HYDRO) ----
-    lags_signed = list(range(-max_lag, max_lag + 1))
-    ccf_vals = []
-    for lag in lags_signed:
-        if lag == 0:
-            ccf_vals.append(np.corrcoef(h_ret, v_ret)[0, 1])
-        elif lag > 0:
-            ccf_vals.append(np.corrcoef(h_ret[lag:], v_ret[:-lag])[0, 1])
-        else:
-            l = -lag
-            ccf_vals.append(np.corrcoef(h_ret[:-l], v_ret[l:])[0, 1])
-    ccf_colors = ['#e67e22' if abs(c) > sig else '#3a3a5c' for c in ccf_vals]
-
-    fig_ccf = go.Figure()
-    fig_ccf.add_trace(go.Bar(
-        x=lags_signed, y=ccf_vals, marker_color=ccf_colors, showlegend=False,
-        hovertemplate='Lag %{x}: CCF=%{y:.4f}<extra></extra>',
-    ))
-    fig_ccf.add_hline(y= sig, line=dict(color='#ffffff', dash='dot', width=1))
-    fig_ccf.add_hline(y=-sig, line=dict(color='#ffffff', dash='dot', width=1))
-    fig_ccf.update_layout(
-        **base_layout(
-            f'HYDROGEL vs VELVETFRUIT — Return Cross-correlation (CCF)   '
-            f'positive lag = VELVET leads HYDRO   95% band ±{sig:.4f}'
-        ),
-        xaxis=dict(title='Lag (ticks)', gridcolor=GRID, zerolinecolor='#888'),
-        yaxis=dict(title='Cross-correlation', gridcolor=GRID, zerolinecolor=ZERO),
-    )
-
-    return fig_acf, fig_ccf
+    return fig_acf
 
 
 if __name__ == '__main__':
