@@ -168,17 +168,17 @@ class Trader:
         return result, conversions, traderData
 
     # ------------------------------------------------------------------
-    # HYDROGEL_PACK — dynamic fair-value MM with inventory skew
+    # HYDROGEL_PACK — one-sided inventory-aware MM
     # ------------------------------------------------------------------
     def hydrogel(self, state: TradingState, shared: dict):
         product     = 'HYDROGEL_PACK'
         result      = []
         pos_lim     = 200
-        quote_size  = 15     # units per passive quote
-        half_spread = 4      # base quote offset from fair value
-        skew_rate   = 0.40   # shift quotes by skew_rate * position
+        quote_size  = 8      # smaller size = less inventory noise
+        half_spread = 4      # quote at fair ± half_spread
         fv_window   = 20     # rolling mid prices (= 2,000 ticks)
-        unwind_thr  = 40     # aggressively unwind if |pos| exceeds this
+        flat_thr    = 8      # quote both sides only when |pos| < flat_thr
+        unwind_thr  = 30     # actively cross spread when |pos| > unwind_thr
 
         mid_hist = shared.get('hp_mid_hist', [])
 
@@ -193,7 +193,6 @@ class Trader:
         best_bid = bids[0] if bids else None
         best_ask = asks[0] if asks else None
 
-        # Update rolling fair value
         if best_bid is not None and best_ask is not None:
             mid_hist.append((best_bid + best_ask) / 2.0)
         if len(mid_hist) > fv_window:
@@ -203,46 +202,44 @@ class Trader:
         buy_cap  = pos_lim - pos
         sell_cap = pos_lim + pos
 
-        # Inventory skew: push both quotes against position
-        skew   = int(pos * skew_rate)
-        bid_px = fair - half_spread - skew
-        ask_px = fair + half_spread - skew
-
-        # Cap quotes to never cross the existing book
+        bid_px = fair - half_spread
+        ask_px = fair + half_spread
         if best_ask is not None:
             bid_px = min(bid_px, best_ask - 1)
         if best_bid is not None:
             ask_px = max(ask_px, best_bid + 1)
 
-        # Emergency unwind: actively take when inventory is too large
+        # Emergency unwind: cross spread aggressively
         if pos > unwind_thr and sell_cap > 0 and bids:
             qty = min(sell_cap, quote_size, od.buy_orders[bids[0]])
             result.append(Order(product, bids[0], -qty))
             sell_cap -= qty
+            return result, {'hp_mid_hist': mid_hist}
 
-        elif pos < -unwind_thr and buy_cap > 0 and asks:
+        if pos < -unwind_thr and buy_cap > 0 and asks:
             qty = min(buy_cap, quote_size, abs(od.sell_orders[asks[0]]))
             result.append(Order(product, asks[0], qty))
             buy_cap -= qty
+            return result, {'hp_mid_hist': mid_hist}
 
-        # Active take: only when clearly mispriced and near-flat
-        if abs(pos) < unwind_thr:
-            for ask in asks:
-                if ask < fair - half_spread and buy_cap > 0:
-                    qty = min(buy_cap, abs(od.sell_orders[ask]))
-                    result.append(Order(product, ask, qty))
-                    buy_cap -= qty
-            for bid in bids:
-                if bid > fair + half_spread and sell_cap > 0:
-                    qty = min(sell_cap, od.buy_orders[bid])
-                    result.append(Order(product, bid, -qty))
-                    sell_cap -= qty
-
-        # Passive make
-        if buy_cap > 0:
-            result.append(Order(product, bid_px, min(quote_size, buy_cap)))
-        if sell_cap > 0:
-            result.append(Order(product, ask_px, -min(quote_size, sell_cap)))
+        # One-sided quoting based on inventory:
+        #   flat  → quote both sides (earn spread)
+        #   long  → only post ask (reduce position + earn spread)
+        #   short → only post bid  (reduce position + earn spread)
+        if pos >= flat_thr:
+            # long: only sell
+            if sell_cap > 0:
+                result.append(Order(product, ask_px, -min(quote_size, sell_cap)))
+        elif pos <= -flat_thr:
+            # short: only buy
+            if buy_cap > 0:
+                result.append(Order(product, bid_px, min(quote_size, buy_cap)))
+        else:
+            # flat: two-sided
+            if buy_cap > 0:
+                result.append(Order(product, bid_px, min(quote_size, buy_cap)))
+            if sell_cap > 0:
+                result.append(Order(product, ask_px, -min(quote_size, sell_cap)))
 
         return result, {'hp_mid_hist': mid_hist}
 
