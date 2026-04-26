@@ -156,10 +156,9 @@ TRADER_COLOR = {t: PALETTE[i % len(PALETTE)] for i, t in enumerate(ALL_TRADERS)}
 
 
 # ---------------------------------------------------------------------------
-# PnL helper
+# PnL helper — returns dict of trader -> DataFrame(timestamp, pnl, pos)
 # ---------------------------------------------------------------------------
 def compute_pnl(product, px_df):
-    """Return dict of trader -> DataFrame(timestamp, pnl) using mark-to-market."""
     tr = tr_all[tr_all['symbol'] == product].sort_values('timestamp').reset_index(drop=True)
     if len(tr) == 0 or px_df is None or len(px_df) == 0:
         return {}
@@ -190,8 +189,11 @@ def compute_pnl(product, px_df):
             idx = np.searchsorted(px_ts, row['timestamp'], side='right') - 1
             idx = max(0, min(idx, len(px_mid) - 1))
             mtm = px_mid[idx]
-            records.append({'timestamp': row['timestamp'],
-                            'pnl': cash + pos * mtm if not np.isnan(mtm) else np.nan})
+            records.append({
+                'timestamp': row['timestamp'],
+                'pnl': cash + pos * mtm if not np.isnan(mtm) else np.nan,
+                'pos': pos,
+            })
 
         result[trader] = pd.DataFrame(records)
 
@@ -203,6 +205,14 @@ def compute_pnl(product, px_df):
 # ---------------------------------------------------------------------------
 app = dash.Dash(__name__)
 app.title = "IMC Trade Visualizer"
+
+METRIC_OPTIONS = [
+    {'label': ' Bid-Ask Spread',             'value': 'spread'},
+    {'label': ' Order Book Imbalance (OBI)', 'value': 'obi'},
+    {'label': ' Price Momentum',             'value': 'momentum'},
+    {'label': ' Net Position',               'value': 'position'},
+    {'label': ' Informed Counterparty Flow', 'value': 'informed'},
+]
 
 app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh', 'fontFamily': 'monospace'}, children=[
 
@@ -267,11 +277,11 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
         dcc.Checklist(
             id='pnl-toggle',
             options=[{'label': ' Show PnL curves', 'value': 'show'}],
-            value=[],
+            value=['show'],
             style={'color': '#aaaaaa', 'fontSize': '13px'},
         ),
     ]),
-    dcc.Graph(id='pnl-chart', style={'height': '40vh', 'display': 'none'}),
+    dcc.Graph(id='pnl-chart', style={'height': '40vh'}),
 
     html.Div(style={'display': 'flex', 'gap': '20px', 'padding': '0 20px 20px'}, children=[
 
@@ -286,10 +296,32 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
         ]),
     ]),
 
-    html.Div(style={'padding': '0 20px 20px'}, children=[
-        html.H4("PnL vs Lot Size", style={'color': '#00e5ff', 'margin': '8px 0 4px'}),
-        dcc.Graph(id='lotsize-chart', style={'height': '45vh'}),
+    # ---- Trader Deep Dive ----
+    html.Div(style={'padding': '0 20px 4px', 'borderTop': '1px solid #30363d', 'marginTop': '8px'}, children=[
+        html.H3("Trader Deep Dive", style={'color': '#00e5ff', 'margin': '12px 0 8px'}),
+        html.Div(style={'display': 'flex', 'flexWrap': 'wrap', 'gap': '32px', 'alignItems': 'flex-start'}, children=[
+            html.Div([
+                html.Label("Focus Trader", style={'color': '#aaaaaa', 'fontSize': '12px'}),
+                dcc.Dropdown(
+                    id='focus-trader-dd',
+                    options=[{'label': t, 'value': t} for t in ALL_TRADERS],
+                    value='Mark 14',
+                    clearable=False,
+                    style={'width': '200px', 'backgroundColor': '#161b22', 'color': '#000'}
+                ),
+            ]),
+            html.Div([
+                html.Label("Overlay Metrics", style={'color': '#aaaaaa', 'fontSize': '12px'}),
+                dcc.Checklist(
+                    id='metric-checks',
+                    options=METRIC_OPTIONS,
+                    value=[],
+                    style={'color': '#c9d1d9', 'fontSize': '13px', 'lineHeight': '2'},
+                ),
+            ]),
+        ]),
     ]),
+    dcc.Graph(id='deepdive-chart', style={'height': '70vh', 'padding': '0 0 20px'}),
 ])
 
 
@@ -336,7 +368,7 @@ def update_pnl(product, selected_traders, ts_range, pnl_toggle):
     if 'show' not in (pnl_toggle or []):
         return fig
 
-    px_prod = px_dict.get(product, px_spot)
+    px_prod  = px_dict.get(product, px_spot)
     pnl_data = compute_pnl(product, px_prod)
 
     for trader in selected_traders:
@@ -349,8 +381,7 @@ def update_pnl(product, selected_traders, ts_range, pnl_toggle):
         color = TRADER_COLOR.get(trader, '#ffffff')
         fig.add_trace(go.Scatter(
             x=df_w['timestamp'], y=df_w['pnl'],
-            mode='lines',
-            line=dict(color=color, width=1.5),
+            mode='lines', line=dict(color=color, width=1.5),
             name=trader,
             hovertemplate=f"<b>{trader}</b><br>PnL: %{{y:.1f}}<extra></extra>",
         ))
@@ -360,87 +391,138 @@ def update_pnl(product, selected_traders, ts_range, pnl_toggle):
 
 
 # ---------------------------------------------------------------------------
-# Lot-size vs PnL scatter
+# Trader Deep Dive callback
 # ---------------------------------------------------------------------------
 @app.callback(
-    Output('lotsize-chart', 'figure'),
-    Input('product-dd',  'value'),
-    Input('trader-dd',   'value'),
-    Input('lookback-sl', 'value'),
+    Output('deepdive-chart', 'figure'),
+    Input('focus-trader-dd', 'value'),
+    Input('metric-checks',   'value'),
+    Input('product-dd',      'value'),
+    Input('ts-slider',       'value'),
+    Input('lookback-sl',     'value'),
 )
-def update_lotsize(product, selected_traders, lookahead):
-    selected_traders = set(selected_traders or [])
+def update_deepdive(focus_trader, metrics, product, ts_range, lookahead):
+    metrics = metrics or []
+    start, end = ts_range
     px_prod = px_dict.get(product, px_spot)
+
+    # Always show PnL row; add one row per selected metric
+    n_rows   = 1 + len(metrics)
+    row_h    = [0.4] + [0.6 / len(metrics)] * len(metrics) if metrics else [1.0]
+    subtitles = ['PnL'] + [m.upper() for m in metrics]
+
+    fig = make_subplots(
+        rows=n_rows, cols=1,
+        shared_xaxes=True,
+        row_heights=row_h,
+        vertical_spacing=0.04,
+        subplot_titles=subtitles,
+    )
+
+    # -- Row 1: PnL --
     pnl_data = compute_pnl(product, px_prod)
-    fwd = trader_forward_returns(product, lookahead)
-    tags = fwd['tag'].to_dict() if len(fwd) else {}
+    df_trader = pnl_data.get(focus_trader, pd.DataFrame())
+    color = TRADER_COLOR.get(focus_trader, '#00e5ff')
 
-    tr_prod = tr_all[tr_all['symbol'] == product]
-
-    TAG_COLOR = {'INFORMED': '#2ecc71', 'DUMB': '#e74c3c', 'MM': '#f1c40f', 'UNKNOWN': '#888888'}
-
-    rows = []
-    for trader, df in pnl_data.items():
-        if len(df) == 0:
-            continue
-        t_trades = tr_prod[(tr_prod['buyer'] == trader) | (tr_prod['seller'] == trader)]
-        avg_lot  = t_trades['quantity'].mean()
-        n_trades = len(t_trades)
-        final_pnl = df['pnl'].dropna().iloc[-1] if len(df['pnl'].dropna()) else 0
-        tag = tags.get(trader, 'UNKNOWN')
-        rows.append({'trader': trader, 'avg_lot': avg_lot, 'pnl': final_pnl,
-                     'n_trades': n_trades, 'tag': tag,
-                     'selected': trader in selected_traders})
-
-    fig = go.Figure()
-    if not rows:
-        return fig
-
-    df_scatter = pd.DataFrame(rows)
-
-    for tag, grp in df_scatter.groupby('tag'):
-        color = TAG_COLOR.get(tag, '#888888')
-        for _, row in grp.iterrows():
-            opacity = 1.0 if row['selected'] else 0.25
-            fig.add_trace(go.Scatter(
-                x=[row['avg_lot']], y=[row['pnl']],
-                mode='markers+text',
-                marker=dict(size=max(8, min(30, row['n_trades'] / 5)),
-                            color=color, opacity=opacity,
-                            line=dict(color='#ffffff' if row['selected'] else color, width=1)),
-                text=[row['trader']],
-                textposition='top center',
-                textfont=dict(size=9, color=color if row['selected'] else '#555555'),
-                name=tag,
-                legendgroup=tag,
-                showlegend=False,
-                hovertemplate=(
-                    f"<b>{row['trader']}</b><br>"
-                    f"Tag: {tag}<br>"
-                    f"Avg lot: {row['avg_lot']:.1f}<br>"
-                    f"PnL: {row['pnl']:.1f}<br>"
-                    f"Trades: {row['n_trades']}<extra></extra>"
-                ),
-            ))
-
-    # One legend entry per tag
-    for tag, color in TAG_COLOR.items():
+    if len(df_trader):
+        df_w = df_trader[(df_trader['timestamp'] >= start) & (df_trader['timestamp'] <= end)]
         fig.add_trace(go.Scatter(
-            x=[None], y=[None], mode='markers',
-            marker=dict(size=10, color=color),
-            name=tag, legendgroup=tag, showlegend=True,
-        ))
+            x=df_w['timestamp'], y=df_w['pnl'],
+            mode='lines', line=dict(color=color, width=2),
+            name='PnL', showlegend=False,
+            hovertemplate='PnL: %{y:.1f}<extra></extra>',
+        ), row=1, col=1)
+    fig.add_hline(y=0, line=dict(color='#444444', dash='dot', width=1), row=1, col=1)
 
-    fig.add_hline(y=0, line=dict(color='#555555', dash='dot', width=1))
+    # -- Metric rows --
+    px_w = px_prod[(px_prod['timestamp'] >= start) & (px_prod['timestamp'] <= end)].copy()
+
+    for i, metric in enumerate(metrics, start=2):
+
+        if metric == 'spread':
+            spread = px_w['ask_price_1'] - px_w['bid_price_1']
+            fig.add_trace(go.Scatter(
+                x=px_w['timestamp'], y=spread,
+                mode='lines', line=dict(color='#f1c40f', width=1),
+                name='Spread', showlegend=False,
+                hovertemplate='Spread: %{y:.2f}<extra></extra>',
+            ), row=i, col=1)
+
+        elif metric == 'obi':
+            bv = px_w[['bid_volume_1', 'bid_volume_2', 'bid_volume_3']].fillna(0).sum(axis=1)
+            av = px_w[['ask_volume_1', 'ask_volume_2', 'ask_volume_3']].fillna(0).sum(axis=1)
+            total = bv + av
+            obi = np.where(total > 0, (bv - av) / total, 0.0)
+            fig.add_trace(go.Scatter(
+                x=px_w['timestamp'], y=obi,
+                mode='lines', line=dict(color='#3498db', width=1),
+                name='OBI', showlegend=False,
+                hovertemplate='OBI: %{y:.3f}<extra></extra>',
+            ), row=i, col=1)
+            fig.add_hline(y=0, line=dict(color='#444444', dash='dot', width=1), row=i, col=1)
+
+        elif metric == 'momentum':
+            # rolling difference over ~500 price ticks
+            mom = px_w['pop_mid'].diff(500)
+            fig.add_trace(go.Scatter(
+                x=px_w['timestamp'], y=mom,
+                mode='lines', line=dict(color='#e67e22', width=1),
+                name='Momentum', showlegend=False,
+                hovertemplate='Momentum: %{y:.2f}<extra></extra>',
+            ), row=i, col=1)
+            fig.add_hline(y=0, line=dict(color='#444444', dash='dot', width=1), row=i, col=1)
+
+        elif metric == 'position':
+            if len(df_trader):
+                df_w2 = df_trader[(df_trader['timestamp'] >= start) & (df_trader['timestamp'] <= end)]
+                fig.add_trace(go.Scatter(
+                    x=df_w2['timestamp'], y=df_w2['pos'],
+                    mode='lines', line=dict(color='#9b59b6', width=1),
+                    name='Net Position', showlegend=False,
+                    hovertemplate='Position: %{y:.0f}<extra></extra>',
+                ), row=i, col=1)
+            fig.add_hline(y=0, line=dict(color='#444444', dash='dot', width=1), row=i, col=1)
+
+        elif metric == 'informed':
+            # get informed tags for this product using current lookahead
+            fwd  = trader_forward_returns(product, lookahead)
+            tags = fwd['tag'].to_dict() if len(fwd) else {}
+            informed = {t for t, tag in tags.items() if tag == 'INFORMED'}
+
+            tr_prod_w = tr_all[
+                (tr_all['symbol'] == product) &
+                (tr_all['timestamp'] >= start) &
+                (tr_all['timestamp'] <= end)
+            ]
+            inf_trades = tr_prod_w[
+                tr_prod_w['buyer'].isin(informed) | tr_prod_w['seller'].isin(informed)
+            ]
+            if len(inf_trades):
+                # bin trade counts into ~500-tick buckets for a smooth bar
+                bin_size = max(1, (end - start) // 200)
+                inf_trades = inf_trades.copy()
+                inf_trades['bucket'] = (inf_trades['timestamp'] // bin_size) * bin_size
+                counts = inf_trades.groupby('bucket').size().reset_index(name='count')
+                fig.add_trace(go.Bar(
+                    x=counts['bucket'], y=counts['count'],
+                    marker_color='#2ecc71', opacity=0.7,
+                    name='Informed flow', showlegend=False,
+                    hovertemplate='Informed trades: %{y}<extra></extra>',
+                ), row=i, col=1)
+
     fig.update_layout(
         paper_bgcolor='#0d1117', plot_bgcolor='#161b22',
         font=dict(color='#aaaaaa', family='monospace'),
-        legend=dict(bgcolor='#161b22', bordercolor='#30363d', font=dict(size=10)),
-        margin=dict(l=50, r=20, t=20, b=40),
-        hovermode='closest',
-        xaxis=dict(title='Avg Lot Size', gridcolor='#1f1f1f', zerolinecolor='#30363d'),
-        yaxis=dict(title='Total PnL (mark-to-market)', gridcolor='#1f1f1f', zerolinecolor='#30363d'),
+        margin=dict(l=50, r=20, t=40, b=30),
+        hovermode='x unified',
+        showlegend=False,
+        title=dict(text=f'{focus_trader} — {product}', font=dict(color='#00e5ff', size=13)),
     )
+    fig.update_xaxes(gridcolor='#1f1f1f', zerolinecolor='#30363d')
+    fig.update_yaxes(gridcolor='#1f1f1f', zerolinecolor='#30363d')
+    fig.update_xaxes(title_text='Timestamp', row=n_rows, col=1)
+    fig.update_annotations(font_color='#00e5ff', font_size=11)
+
     return fig
 
 
