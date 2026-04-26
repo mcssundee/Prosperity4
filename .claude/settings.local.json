@@ -51,7 +51,9 @@
       "Bash(python3.11 *)",
       "Bash(/Users/Guan/.local/share/uv/tools/prosperity4btx/bin/prosperity4btx --help)",
       "Bash(/Users/Guan/.local/share/uv/tools/prosperity4btx/bin/prosperity4btx *)",
-      "Bash(gh repo *)"
+      "Bash(gh repo *)",
+      "Bash(chmod +x *)",
+      "Bash(./backtesting/run.sh trader.py 4-1 --no-vis --no-out)"
     ]
   }
 }

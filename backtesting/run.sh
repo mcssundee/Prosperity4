@@ -13,4 +13,4 @@ cd "$(dirname "$0")/.." || exit 1
 REPO="$(pwd)/backtesting/prosperity4bt_repo"
 export PYTHONPATH="$REPO:$PYTHONPATH"
 
-python -m prosperity4bt "$@"
+python3 -m prosperity4bt "$@"
