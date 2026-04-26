@@ -172,13 +172,14 @@ class Trader:
     # HYDROGEL_PACK — dynamic fair-value MM with inventory skew
     # ------------------------------------------------------------------
     def hydrogel(self, state: TradingState, shared: dict):
-        product    = 'HYDROGEL_PACK'
-        result     = []
-        pos_lim    = 200
-        quote_size = 15       # units per passive quote
-        half_spread = 5       # quote at fair ± half_spread (10-pt round-trip capture)
-        skew_rate  = 0.08     # shift quotes by skew_rate * position (tightens toward 0)
-        fv_window  = 100      # rolling mid prices to average (= 10,000 ticks)
+        product     = 'HYDROGEL_PACK'
+        result      = []
+        pos_lim     = 200
+        quote_size  = 15     # units per passive quote
+        half_spread = 6      # base quote offset from fair value
+        skew_rate   = 0.50   # shift quotes by skew_rate * position
+        fv_window   = 100    # rolling mid prices (= 10,000 ticks)
+        unwind_thr  = 80     # aggressively unwind if |pos| exceeds this
 
         mid_hist = shared.get('hp_mid_hist', [])
 
@@ -199,27 +200,44 @@ class Trader:
         if len(mid_hist) > fv_window:
             mid_hist = mid_hist[-fv_window:]
 
-        fair = round(sum(mid_hist) / len(mid_hist)) if mid_hist else 10000
-
+        fair     = round(sum(mid_hist) / len(mid_hist)) if mid_hist else 10000
         buy_cap  = pos_lim - pos
         sell_cap = pos_lim + pos
 
-        # Inventory skew: positive pos → shift both quotes down to encourage selling
-        skew     = int(pos * skew_rate)
-        bid_px   = fair - half_spread - skew
-        ask_px   = fair + half_spread - skew
+        # Inventory skew: push both quotes against position
+        skew   = int(pos * skew_rate)
+        bid_px = fair - half_spread - skew
+        ask_px = fair + half_spread - skew
 
-        # Active take: cross only if quote is clearly mispriced vs fair value
-        for ask in asks:
-            if ask < fair - half_spread and buy_cap > 0:
-                qty = min(buy_cap, abs(od.sell_orders[ask]))
-                result.append(Order(product, ask, qty))
-                buy_cap -= qty
-        for bid in bids:
-            if bid > fair + half_spread and sell_cap > 0:
-                qty = min(sell_cap, od.buy_orders[bid])
-                result.append(Order(product, bid, -qty))
-                sell_cap -= qty
+        # Cap quotes to never cross the existing book
+        if best_ask is not None:
+            bid_px = min(bid_px, best_ask - 1)
+        if best_bid is not None:
+            ask_px = max(ask_px, best_bid + 1)
+
+        # Emergency unwind: actively take when inventory is too large
+        if pos > unwind_thr and sell_cap > 0 and bids:
+            qty = min(sell_cap, quote_size, od.buy_orders[bids[0]])
+            result.append(Order(product, bids[0], -qty))
+            sell_cap -= qty
+
+        elif pos < -unwind_thr and buy_cap > 0 and asks:
+            qty = min(buy_cap, quote_size, abs(od.sell_orders[asks[0]]))
+            result.append(Order(product, asks[0], qty))
+            buy_cap -= qty
+
+        # Active take: only when clearly mispriced and near-flat
+        if abs(pos) < unwind_thr:
+            for ask in asks:
+                if ask < fair - half_spread and buy_cap > 0:
+                    qty = min(buy_cap, abs(od.sell_orders[ask]))
+                    result.append(Order(product, ask, qty))
+                    buy_cap -= qty
+            for bid in bids:
+                if bid > fair + half_spread and sell_cap > 0:
+                    qty = min(sell_cap, od.buy_orders[bid])
+                    result.append(Order(product, bid, -qty))
+                    sell_cap -= qty
 
         # Passive make
         if buy_cap > 0:

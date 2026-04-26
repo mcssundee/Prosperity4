@@ -67,7 +67,9 @@
       "Bash(open *)",
       "Bash(pkill -f \"python3 4algo/vis.py\")",
       "Bash(lsof -ti:8050)",
-      "Bash(xargs kill *)"
+      "Bash(xargs kill *)",
+      "Bash(PYTHONPATH=/Users/Guan/Prosperity4/utils python3 backtesting/local_backtest.py trader.py --round 4 --days 1 2 3 --merge-pnl)",
+      "Bash(PYTHONPATH=utils python3 backtesting/local_backtest.py trader.py --round 4 --days 1 2 3 --merge-pnl)"
     ]
   }
 }
