@@ -866,50 +866,16 @@ def update(product, selected_traders, ts_range, lookahead):
 
 
 # ---------------------------------------------------------------------------
-# Relationship analysis callback
+# HYDROGEL ACF + CCF (returns only)
 # ---------------------------------------------------------------------------
 @app.callback(
-    Output('rel-ts-chart',      'figure'),
-    Output('rel-scatter-chart', 'figure'),
-    Output('rel-ccf-chart',     'figure'),
-    Input('rel-window-sl', 'value'),
-    Input('rel-lag-sl',    'value'),
-    Input('ts-slider',     'value'),
+    Output('rel-acf-chart', 'figure'),
+    Output('rel-ccf-chart', 'figure'),
+    Input('rel-lag-sl', 'value'),
+    Input('ts-slider',  'value'),
 )
-def update_relationship(window, max_lag, ts_range):
+def update_relationship(max_lag, ts_range):
     start, end = ts_range
-
-    hydro = px_dict.get('HYDROGEL_PACK')
-    velv  = px_dict.get('VELVETFRUIT_EXTRACT')
-    if hydro is None or velv is None:
-        empty = go.Figure()
-        return empty, empty
-
-    # Align on timestamp via merge_asof
-    h = hydro[['timestamp', 'pop_mid']].rename(columns={'pop_mid': 'hydro'})
-    v = velv[['timestamp',  'pop_mid']].rename(columns={'pop_mid': 'velv'})
-    df = pd.merge_asof(h.sort_values('timestamp'),
-                       v.sort_values('timestamp'),
-                       on='timestamp', direction='nearest').dropna()
-    df = df[(df['timestamp'] >= start) & (df['timestamp'] <= end)].reset_index(drop=True)
-
-    if len(df) < 50:
-        empty = go.Figure()
-        return empty, empty
-
-    # OLS beta and intercept over full window
-    beta, intercept = np.polyfit(df['velv'], df['hydro'], 1)
-
-    # Derived series
-    df['hydro_norm'] = df['hydro'] / df['hydro'].iloc[0] * 100
-    df['velv_norm']  = df['velv']  / df['velv'].iloc[0]  * 100
-    df['spread']     = df['hydro'] - (beta * df['velv'] + intercept)
-    spread_mean      = df['spread'].rolling(window).mean()
-    spread_std       = df['spread'].rolling(window).std().replace(0, np.nan)
-    df['zscore']     = (df['spread'] - spread_mean) / spread_std
-    df['rolling_corr'] = df['hydro'].rolling(window).corr(df['velv'])
-    df['ratio']      = df['hydro'] / df['velv']
-
     GRID = '#1f1f1f'
     ZERO = '#30363d'
 
@@ -918,156 +884,80 @@ def update_relationship(window, max_lag, ts_range):
             paper_bgcolor='#0d1117', plot_bgcolor='#161b22',
             font=dict(color='#aaaaaa', family='monospace'),
             legend=dict(bgcolor='#161b22', bordercolor='#30363d', font=dict(size=10)),
-            margin=dict(l=60, r=20, t=35, b=20),
-            hovermode='x unified',
+            margin=dict(l=60, r=20, t=35, b=40),
+            bargap=0.1,
             title=dict(text=title, font=dict(color='#00e5ff', size=12)),
         )
 
-    # ---- Time-series figure (4 rows) ----
-    fig_ts = make_subplots(
-        rows=4, cols=1, shared_xaxes=True,
-        row_heights=[0.3, 0.25, 0.25, 0.2],
-        vertical_spacing=0.04,
-        subplot_titles=[
-            'Normalised prices (indexed to 100)',
-            f'Residual spread  (HYDRO − {beta:.3f}×VELV)',
-            'Spread z-score  (mean-reversion signal)',
-            f'Rolling correlation  (window={window:,})',
-        ],
+    hydro = px_dict.get('HYDROGEL_PACK')
+    velv  = px_dict.get('VELVETFRUIT_EXTRACT')
+    empty = go.Figure()
+    empty.update_layout(**base_layout())
+    if hydro is None or velv is None:
+        return empty, empty
+
+    h = hydro[['timestamp', 'pop_mid']].rename(columns={'pop_mid': 'hydro'})
+    v = velv[['timestamp',  'pop_mid']].rename(columns={'pop_mid': 'velv'})
+    df = pd.merge_asof(h.sort_values('timestamp'),
+                       v.sort_values('timestamp'),
+                       on='timestamp', direction='nearest').dropna()
+    df = df[(df['timestamp'] >= start) & (df['timestamp'] <= end)].reset_index(drop=True)
+
+    if len(df) < max_lag + 10:
+        return empty, empty
+
+    h_ret = np.diff(df['hydro'].values, prepend=df['hydro'].values[0])
+    v_ret = np.diff(df['velv'].values,  prepend=df['velv'].values[0])
+    sig   = 1.96 / np.sqrt(len(df))
+    lags  = list(range(1, max_lag + 1))
+
+    # ---- ACF: HYDROGEL returns vs itself ----
+    acf_vals = [np.corrcoef(h_ret[k:], h_ret[:-k])[0, 1] for k in lags]
+    acf_colors = ['#2ecc71' if abs(c) > sig else '#3a3a5c' for c in acf_vals]
+
+    fig_acf = go.Figure()
+    fig_acf.add_trace(go.Bar(
+        x=lags, y=acf_vals, marker_color=acf_colors, showlegend=False,
+        hovertemplate='Lag %{x}: ACF=%{y:.4f}<extra></extra>',
+    ))
+    fig_acf.add_hline(y= sig, line=dict(color='#ffffff', dash='dot', width=1))
+    fig_acf.add_hline(y=-sig, line=dict(color='#ffffff', dash='dot', width=1))
+    fig_acf.update_layout(
+        **base_layout(f'HYDROGEL_PACK — Return Autocorrelation (ACF)   95% band ±{sig:.4f}'),
+        xaxis=dict(title='Lag (ticks)', gridcolor=GRID, zerolinecolor='#888'),
+        yaxis=dict(title='Autocorrelation', gridcolor=GRID, zerolinecolor=ZERO),
     )
 
-    # Row 1: normalised prices
-    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['hydro_norm'],
-        mode='lines', line=dict(color='#2ecc71', width=1.5), name='HYDROGEL_PACK'), row=1, col=1)
-    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['velv_norm'],
-        mode='lines', line=dict(color='#7c9ef5', width=1.5), name='VELVETFRUIT_EXTRACT'), row=1, col=1)
-
-    # Row 2: residual spread + ±1σ bands
-    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['spread'],
-        mode='lines', line=dict(color='#f1c40f', width=1), name='Spread', showlegend=False), row=2, col=1)
-    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=spread_mean + spread_std,
-        mode='lines', line=dict(color='#555', width=1, dash='dot'), name='+1σ', showlegend=False), row=2, col=1)
-    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=spread_mean - spread_std,
-        mode='lines', line=dict(color='#555', width=1, dash='dot'), name='−1σ', showlegend=False,
-        fill='tonexty', fillcolor='rgba(255,255,255,0.03)'), row=2, col=1)
-    fig_ts.add_hline(y=0, line=dict(color=ZERO, dash='dot', width=1), row=2, col=1)
-
-    # Row 3: z-score
-    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['zscore'],
-        mode='lines', line=dict(color='#e67e22', width=1), name='Z-score', showlegend=False), row=3, col=1)
-    for lvl, col in [(2, '#e74c3c'), (-2, '#2ecc71'), (1, '#555'), (-1, '#555')]:
-        fig_ts.add_hline(y=lvl, line=dict(color=col, dash='dot', width=1), row=3, col=1)
-
-    # Row 4: rolling correlation
-    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['rolling_corr'],
-        mode='lines', line=dict(color='#9b59b6', width=1.5), name='Corr', showlegend=False), row=4, col=1)
-    fig_ts.add_hline(y=0, line=dict(color=ZERO, dash='dot', width=1), row=4, col=1)
-
-    full_corr = df['hydro'].corr(df['velv'])
-    fig_ts.update_layout(**base_layout(
-        f'Full-window correlation: {full_corr:.4f}   |   OLS β={beta:.4f}   intercept={intercept:.2f}'
-    ))
-    fig_ts.update_xaxes(gridcolor=GRID, zerolinecolor=ZERO)
-    fig_ts.update_yaxes(gridcolor=GRID, zerolinecolor=ZERO)
-    fig_ts.update_yaxes(title_text='Index',   row=1, col=1)
-    fig_ts.update_yaxes(title_text='Spread',  row=2, col=1)
-    fig_ts.update_yaxes(title_text='Z',       row=3, col=1)
-    fig_ts.update_yaxes(title_text='Corr',    row=4, col=1)
-    fig_ts.update_xaxes(title_text='Timestamp', row=4, col=1)
-    fig_ts.update_annotations(font_color='#00e5ff', font_size=11)
-
-    # ---- Scatter figure ----
-    # Colour points by zscore so you can see regime
-    zscore_vals = df['zscore'].fillna(0).clip(-3, 3)
-    fig_sc = go.Figure()
-    fig_sc.add_trace(go.Scatter(
-        x=df['velv'], y=df['hydro'],
-        mode='markers',
-        marker=dict(
-            size=3, opacity=0.6,
-            color=zscore_vals,
-            colorscale='RdYlGn',
-            cmin=-2, cmax=2,
-            colorbar=dict(title='Z-score', thickness=12,
-                          tickfont=dict(color='#aaaaaa', size=10)),
-        ),
-        name='Price points',
-        hovertemplate='VELV: %{x:.1f}<br>HYDRO: %{y:.1f}<extra></extra>',
-    ))
-    # OLS regression line
-    x_range = np.linspace(df['velv'].min(), df['velv'].max(), 200)
-    fig_sc.add_trace(go.Scatter(
-        x=x_range, y=beta * x_range + intercept,
-        mode='lines', line=dict(color='#e74c3c', width=2, dash='dash'),
-        name=f'OLS  y={beta:.4f}x + {intercept:.2f}',
-    ))
-    r2 = df['hydro'].corr(df['velv']) ** 2
-    fig_sc.update_layout(
-        **base_layout(f'Scatter — R²={r2:.4f}   β={beta:.4f}'),
-        xaxis=dict(title='VELVETFRUIT_EXTRACT pop_mid', gridcolor=GRID, zerolinecolor=ZERO),
-        yaxis=dict(title='HYDROGEL_PACK pop_mid',       gridcolor=GRID, zerolinecolor=ZERO),
-    )
-
-    # ---- Cross-correlation figure ----
-    # Compute CCF for price levels and for returns at each lag
-    h_vals = df['hydro'].values
-    v_vals = df['velv'].values
-    h_ret  = np.diff(h_vals, prepend=h_vals[0])
-    v_ret  = np.diff(v_vals, prepend=v_vals[0])
-
-    lags = list(range(-max_lag, max_lag + 1))
-    ccf_levels  = []
-    ccf_returns = []
-    # significance threshold (approx 95% for white noise)
-    sig = 1.96 / np.sqrt(len(df))
-
-    for lag in lags:
+    # ---- CCF: HYDROGEL returns vs VELVET returns (positive lag = VELVET leads HYDRO) ----
+    lags_signed = list(range(-max_lag, max_lag + 1))
+    ccf_vals = []
+    for lag in lags_signed:
         if lag == 0:
-            ccf_levels.append(np.corrcoef(h_vals, v_vals)[0, 1])
-            ccf_returns.append(np.corrcoef(h_ret, v_ret)[0, 1])
+            ccf_vals.append(np.corrcoef(h_ret, v_ret)[0, 1])
         elif lag > 0:
-            # positive lag: VELVET leads HYDRO by `lag` ticks
-            ccf_levels.append(np.corrcoef(h_vals[lag:], v_vals[:-lag])[0, 1])
-            ccf_returns.append(np.corrcoef(h_ret[lag:], v_ret[:-lag])[0, 1])
+            ccf_vals.append(np.corrcoef(h_ret[lag:], v_ret[:-lag])[0, 1])
         else:
-            # negative lag: HYDRO leads VELVET
             l = -lag
-            ccf_levels.append(np.corrcoef(h_vals[:-l], v_vals[l:])[0, 1])
-            ccf_returns.append(np.corrcoef(h_ret[:-l], v_ret[l:])[0, 1])
+            ccf_vals.append(np.corrcoef(h_ret[:-l], v_ret[l:])[0, 1])
+    ccf_colors = ['#e67e22' if abs(c) > sig else '#3a3a5c' for c in ccf_vals]
 
-    fig_ccf = make_subplots(
-        rows=2, cols=1,
-        vertical_spacing=0.12,
-        subplot_titles=[
-            'Cross-correlation — price levels  (positive lag = VELVET leads HYDRO)',
-            'Cross-correlation — price CHANGES/returns',
-        ],
-    )
-
-    bar_colors_l = ['#e74c3c' if abs(c) > sig else '#3a3a5c' for c in ccf_levels]
-    bar_colors_r = ['#2ecc71' if abs(c) > sig else '#3a3a5c' for c in ccf_returns]
-
-    fig_ccf.add_trace(go.Bar(x=lags, y=ccf_levels,
-        marker_color=bar_colors_l, name='Levels CCF', showlegend=False,
-        hovertemplate='Lag %{x}: corr=%{y:.4f}<extra></extra>'), row=1, col=1)
-    fig_ccf.add_hline(y=sig,  line=dict(color='#ffffff', dash='dot', width=1), row=1, col=1)
-    fig_ccf.add_hline(y=-sig, line=dict(color='#ffffff', dash='dot', width=1), row=1, col=1)
-
-    fig_ccf.add_trace(go.Bar(x=lags, y=ccf_returns,
-        marker_color=bar_colors_r, name='Returns CCF', showlegend=False,
-        hovertemplate='Lag %{x}: corr=%{y:.4f}<extra></extra>'), row=2, col=1)
-    fig_ccf.add_hline(y=sig,  line=dict(color='#ffffff', dash='dot', width=1), row=2, col=1)
-    fig_ccf.add_hline(y=-sig, line=dict(color='#ffffff', dash='dot', width=1), row=2, col=1)
-
+    fig_ccf = go.Figure()
+    fig_ccf.add_trace(go.Bar(
+        x=lags_signed, y=ccf_vals, marker_color=ccf_colors, showlegend=False,
+        hovertemplate='Lag %{x}: CCF=%{y:.4f}<extra></extra>',
+    ))
+    fig_ccf.add_hline(y= sig, line=dict(color='#ffffff', dash='dot', width=1))
+    fig_ccf.add_hline(y=-sig, line=dict(color='#ffffff', dash='dot', width=1))
     fig_ccf.update_layout(
-        **base_layout(f'Cross-correlation  (dotted lines = 95% significance threshold ±{sig:.4f})'),
-        bargap=0.1,
+        **base_layout(
+            f'HYDROGEL vs VELVETFRUIT — Return Cross-correlation (CCF)   '
+            f'positive lag = VELVET leads HYDRO   95% band ±{sig:.4f}'
+        ),
+        xaxis=dict(title='Lag (ticks)', gridcolor=GRID, zerolinecolor='#888'),
+        yaxis=dict(title='Cross-correlation', gridcolor=GRID, zerolinecolor=ZERO),
     )
-    fig_ccf.update_xaxes(title_text='Lag (ticks)', gridcolor=GRID, zerolinecolor='#888')
-    fig_ccf.update_yaxes(title_text='Correlation', gridcolor=GRID, zerolinecolor=ZERO)
-    fig_ccf.update_annotations(font_color='#00e5ff', font_size=11)
 
-    return fig_ts, fig_sc, fig_ccf
+    return fig_acf, fig_ccf
 
 
 if __name__ == '__main__':
