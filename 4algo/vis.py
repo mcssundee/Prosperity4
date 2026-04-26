@@ -934,10 +934,12 @@ def update(product, selected_traders, ts_range, lookahead):
 # ---------------------------------------------------------------------------
 @app.callback(
     Output('rel-acf-chart', 'figure'),
-    Input('rel-lag-sl', 'value'),
-    Input('ts-slider',  'value'),
+    Output('acf-heatmap',   'figure'),
+    Input('rel-lag-sl',    'value'),
+    Input('acf-window-sl', 'value'),
+    Input('ts-slider',     'value'),
 )
-def update_relationship(max_lag, ts_range):
+def update_relationship(max_lag, window, ts_range):
     start, end = ts_range
     GRID = '#1f1f1f'
     ZERO = '#30363d'
