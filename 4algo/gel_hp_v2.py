@@ -88,24 +88,25 @@ class Trader:
         ts = state.timestamp
         orders = []
 
-        # --- EOD flattening: close position in last 10k ticks ---
+        # --- EOD flattening: hit every available level to close position ---
         if ts >= EOD_START and pos != 0:
-            urgency = (ts - EOD_START) / (EOD_HARD - EOD_START)
-            close_thresh = round(10 * (1 - urgency))  # 10 → 0 as day ends
-            if pos > 0:
+            remaining = abs(pos)
+            if pos > 0:  # long — need to sell; hit all bids
                 for bid in sorted(od.buy_orders, reverse=True):
-                    if bid >= mid - close_thresh and sell_cap > 0:
-                        qty = min(sell_cap, pos, od.buy_orders[bid])
-                        orders.append(Order(product, bid, -qty))
-                        sell_cap -= qty
-                        pos -= qty
-            else:
+                    if sell_cap <= 0 or remaining <= 0:
+                        break
+                    qty = min(sell_cap, remaining, od.buy_orders[bid])
+                    orders.append(Order(product, bid, -qty))
+                    sell_cap -= qty
+                    remaining -= qty
+            else:  # short — need to buy; lift all asks
                 for ask in sorted(od.sell_orders):
-                    if ask <= mid + close_thresh and buy_cap > 0:
-                        qty = min(buy_cap, -pos, abs(od.sell_orders[ask]))
-                        orders.append(Order(product, ask, qty))
-                        buy_cap -= qty
-                        pos += qty
+                    if buy_cap <= 0 or remaining <= 0:
+                        break
+                    qty = min(buy_cap, remaining, abs(od.sell_orders[ask]))
+                    orders.append(Order(product, ask, qty))
+                    buy_cap -= qty
+                    remaining -= qty
             return orders, {'last_m38_ts': last_m38_ts}
 
         # --- Aggressive take: mean-reversion when price far from CENTER ---
