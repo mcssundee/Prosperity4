@@ -289,7 +289,73 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
 
 
 # ---------------------------------------------------------------------------
-# Callback
+# PnL chart visibility toggle
+# ---------------------------------------------------------------------------
+@app.callback(
+    Output('pnl-chart', 'style'),
+    Input('pnl-toggle', 'value'),
+)
+def toggle_pnl(value):
+    if 'show' in (value or []):
+        return {'height': '40vh'}
+    return {'height': '40vh', 'display': 'none'}
+
+
+# ---------------------------------------------------------------------------
+# PnL chart callback
+# ---------------------------------------------------------------------------
+@app.callback(
+    Output('pnl-chart', 'figure'),
+    Input('product-dd',  'value'),
+    Input('trader-dd',   'value'),
+    Input('ts-slider',   'value'),
+    Input('pnl-toggle',  'value'),
+)
+def update_pnl(product, selected_traders, ts_range, pnl_toggle):
+    selected_traders = selected_traders or []
+    start, end = ts_range
+
+    fig = go.Figure()
+    fig.update_layout(
+        paper_bgcolor='#0d1117', plot_bgcolor='#161b22',
+        font=dict(color='#aaaaaa', family='monospace'),
+        legend=dict(bgcolor='#161b22', bordercolor='#30363d', font=dict(size=10)),
+        margin=dict(l=50, r=20, t=30, b=30),
+        hovermode='x unified',
+        yaxis_title='Mark-to-Market PnL',
+        xaxis_title='Timestamp',
+        xaxis=dict(gridcolor='#1f1f1f', zerolinecolor='#30363d'),
+        yaxis=dict(gridcolor='#1f1f1f', zerolinecolor='#30363d'),
+    )
+
+    if 'show' not in (pnl_toggle or []):
+        return fig
+
+    px_prod = px_dict.get(product, px_spot)
+    pnl_data = compute_pnl(product, px_prod)
+
+    for trader in selected_traders:
+        df = pnl_data.get(trader)
+        if df is None or len(df) == 0:
+            continue
+        df_w = df[(df['timestamp'] >= start) & (df['timestamp'] <= end)]
+        if len(df_w) == 0:
+            continue
+        color = TRADER_COLOR.get(trader, '#ffffff')
+        fig.add_trace(go.Scatter(
+            x=df_w['timestamp'], y=df_w['pnl'],
+            mode='lines',
+            line=dict(color=color, width=1.5),
+            name=trader,
+            hovertemplate=f"<b>{trader}</b><br>PnL: %{{y:.1f}}<extra></extra>",
+        ))
+
+    fig.add_hline(y=0, line=dict(color='#555555', dash='dot', width=1))
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Main callback
 # ---------------------------------------------------------------------------
 @app.callback(
     Output('main-chart',  'figure'),
