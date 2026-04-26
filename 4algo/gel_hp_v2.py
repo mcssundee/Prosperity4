@@ -34,24 +34,16 @@ class Logger:
 
 logger = Logger()
 
-EOD_START = 990_000
+# HYDROGEL_PACK observed fair value across all 3 days of data: mean ≈ 9995,
+# range 9891–10081. 10000 is the known long-run center used for mean-reversion.
+FAIR = 10000
 
-# Slow EMA of mid price — used as adaptive fair value for mean-reversion takes.
-# Alpha=0.002 ≈ 500-tick half-life; tracks intraday drift without chasing noise.
-EMA_ALPHA = 0.002
-
-# Symmetric take threshold in ticks (applied to the ema, not hardcoded 10000).
-# We buy aggressively when best_ask is this many ticks below ema,
-# and sell aggressively when best_bid is this many ticks above ema.
-# 8 ticks ≈ half the 16-tick spread — only fires when price is meaningfully dislocated.
+# Symmetric take threshold: fire when best_ask < FAIR-THRESH (buy) or
+# best_bid > FAIR+THRESH (sell). The spread is 16 ticks wide so best_ask =
+# mid+8 — a threshold of 8 means we take when mid < FAIR-16 or mid > FAIR+16.
 TAKE_THRESH = 8
 
-# Passive quote skew parameters.
-# Inventory skew: shift quotes 1 tick per INV_DIV units of open position.
-# Mean-rev skew: shift quotes 1 tick per MR_DIV ticks of mid deviation from ema.
-# Both pull the quotes toward zero inventory and toward fair value.
-INV_DIV = 30
-MR_DIV  = 20
+EOD_START = 990_000
 
 
 class Trader:
@@ -76,22 +68,17 @@ class Trader:
         pos_lim = 200
         quote_size = 8
 
-        ema = shared.get('hp_ema')
         last_m38_ts = shared.get('last_m38_ts', state.timestamp)
 
         od = state.order_depths.get(product)
         if not od or not od.buy_orders or not od.sell_orders:
-            return [], {'hp_ema': ema, 'last_m38_ts': last_m38_ts}
+            return [], {'last_m38_ts': last_m38_ts}
 
         best_bid = max(od.buy_orders)
         best_ask = min(od.sell_orders)
         mid = (best_bid + best_ask) / 2.0
 
-        # Adaptive fair value: slow EMA tracks intraday drift
-        ema = mid if ema is None else EMA_ALPHA * mid + (1 - EMA_ALPHA) * ema
-        fair = ema
-
-        # Mark 38 timing: size up when they're statistically due (median gap ~700ts)
+        # Mark 38 timing: size up when statistically due (median gap ~700ts)
         m38_now = [t for t in state.market_trades.get(product, [])
                    if t.buyer == 'Mark 38' or t.seller == 'Mark 38']
         if m38_now:
@@ -106,9 +93,10 @@ class Trader:
         orders = []
 
         # --- EOD: hit every available level to close position flat ---
-        if ts >= EOD_START and pos != 0:
-            remaining = abs(pos)
+        # Always run during EOD window regardless of position size.
+        if ts >= EOD_START:
             if pos > 0:
+                remaining = pos
                 for bid in sorted(od.buy_orders, reverse=True):
                     if sell_cap <= 0 or remaining <= 0:
                         break
@@ -116,7 +104,8 @@ class Trader:
                     orders.append(Order(product, bid, -qty))
                     sell_cap -= qty
                     remaining -= qty
-            else:
+            elif pos < 0:
+                remaining = -pos
                 for ask in sorted(od.sell_orders):
                     if buy_cap <= 0 or remaining <= 0:
                         break
@@ -124,34 +113,39 @@ class Trader:
                     orders.append(Order(product, ask, qty))
                     buy_cap -= qty
                     remaining -= qty
-            return orders, {'hp_ema': ema, 'last_m38_ts': last_m38_ts}
+            return orders, {'last_m38_ts': last_m38_ts}
 
-        # --- Aggressive take: symmetric mean-reversion around adaptive fair ---
-        # Buy when ask is meaningfully below fair (price dislocated low).
-        # Sell when bid is meaningfully above fair (price dislocated high).
+        # --- Aggressive take: mean-reversion around FAIR=10000 ---
+        # Price AC = -0.12: mildly mean-reverting. We take when the dislocation
+        # is large enough to be worth the inventory risk (TAKE_THRESH ticks).
+        # With spread=16, best_ask = mid+8, so ask < FAIR-8 means mid < FAIR-16.
         for ask in sorted(od.sell_orders):
-            if ask < fair - TAKE_THRESH and buy_cap > 0:
+            if ask < FAIR - TAKE_THRESH and buy_cap > 0:
                 qty = min(buy_cap, abs(od.sell_orders[ask]))
                 orders.append(Order(product, ask, qty))
                 buy_cap -= qty
         for bid in sorted(od.buy_orders, reverse=True):
-            if bid > fair + TAKE_THRESH and sell_cap > 0:
+            if bid > FAIR + TAKE_THRESH and sell_cap > 0:
                 qty = min(sell_cap, od.buy_orders[bid])
                 orders.append(Order(product, bid, -qty))
                 sell_cap -= qty
 
         # --- Passive inside-spread quotes ---
-        # Post 1 tick inside best bid/ask — we become the sole best bid/ask,
-        # so Mark 38 (who always hits best bid/ask) fills us every visit.
-        # Skew both sides by inventory + mean-reversion signal to stay flat.
-        inv_skew = -round(pos / INV_DIV)
-        mr_skew  = -round((mid - fair) / MR_DIV)
+        # Post 1 tick inside best bid/ask — we become the sole best bid/ask.
+        # Mark 38 always hits the best bid/ask, so they fill us on every visit.
+        # Spread is 16 ticks; posting at +1/-1 captures 14 ticks per round trip.
+        #
+        # Two skews shift both quotes in the same direction:
+        #   inv_skew: pulls quotes toward zero position (inventory mean-reversion)
+        #   mr_skew:  pulls quotes toward FAIR when price deviates (price mean-reversion)
+        inv_skew = -round(pos / 30)
+        mr_skew  = -round((mid - FAIR) / 20)
         skew = inv_skew + mr_skew
 
         bid_px = best_bid + 1 + skew
         ask_px = best_ask - 1 + skew
 
-        # Guards: never cross, never outside the existing book
+        # Never cross or step outside the existing book
         bid_px = min(bid_px, best_ask - 1)
         ask_px = max(ask_px, best_bid + 1)
         if bid_px >= ask_px:
@@ -162,4 +156,4 @@ class Trader:
         if sell_cap > 0:
             orders.append(Order(product, ask_px, -min(qs, sell_cap)))
 
-        return orders, {'hp_ema': ema, 'last_m38_ts': last_m38_ts}
+        return orders, {'last_m38_ts': last_m38_ts}
