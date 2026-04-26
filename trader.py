@@ -227,19 +227,24 @@ class Trader:
         #   long  → only post ask (reduce position + earn spread)
         #   short → only post bid  (reduce position + earn spread)
         if pos >= flat_thr:
-            # long: only sell
             if sell_cap > 0:
-                result.append(Order(product, ask_px, -min(quote_size, sell_cap)))
+                result.append(Order(product, ask_px,     -min(quote_size, sell_cap)))
+            if sell_cap > quote_size:
+                result.append(Order(product, ask_px + 2, -min(quote_size, sell_cap - quote_size)))
         elif pos <= -flat_thr:
-            # short: only buy
             if buy_cap > 0:
-                result.append(Order(product, bid_px, min(quote_size, buy_cap)))
+                result.append(Order(product, bid_px,     min(quote_size, buy_cap)))
+            if buy_cap > quote_size:
+                result.append(Order(product, bid_px - 2, min(quote_size, buy_cap - quote_size)))
         else:
-            # flat: two-sided
             if buy_cap > 0:
-                result.append(Order(product, bid_px, min(quote_size, buy_cap)))
+                result.append(Order(product, bid_px,     min(quote_size, buy_cap)))
+            if buy_cap > quote_size:
+                result.append(Order(product, bid_px - 2, min(quote_size, buy_cap - quote_size)))
             if sell_cap > 0:
-                result.append(Order(product, ask_px, -min(quote_size, sell_cap)))
+                result.append(Order(product, ask_px,     -min(quote_size, sell_cap)))
+            if sell_cap > quote_size:
+                result.append(Order(product, ask_px + 2, -min(quote_size, sell_cap - quote_size)))
 
         return result, {'hp_mid_hist': mid_hist}
 
