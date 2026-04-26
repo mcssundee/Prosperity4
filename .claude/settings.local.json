@@ -59,7 +59,10 @@
       "Bash(./backtesting/run.sh round4/algo/get_mark38_test.py 4 --no-vis --no-out)",
       "Bash(PYTHONPATH=backtesting/prosperity4bt_repo:backtesting/prosperity4bt_repo/prosperity4bt python3 *)",
       "Bash(wait)",
-      "Bash(jobs -l)"
+      "Bash(jobs -l)",
+      "Bash(mv /Users/Guan/Prosperity4/round3/algo/* /Users/Guan/Prosperity4/round3/)",
+      "Bash(mv /Users/Guan/Prosperity4/round4/algo/* /Users/Guan/Prosperity4/round4/)",
+      "Bash(mv /Users/Guan/Prosperity4/round5/algo/* /Users/Guan/Prosperity4/round5/)"
     ]
   }
 }
