@@ -446,10 +446,20 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
                     tooltip={'placement': 'bottom', 'always_visible': True},
                 ),
             ], style={'width': '300px'}),
+            html.Div([
+                html.Label("Max lag (ticks) for CCF", style={'color': '#aaaaaa', 'fontSize': '12px'}),
+                dcc.Slider(
+                    id='rel-lag-sl',
+                    min=10, max=500, step=10, value=100,
+                    marks={10: '10', 100: '100', 250: '250', 500: '500'},
+                    tooltip={'placement': 'bottom', 'always_visible': True},
+                ),
+            ], style={'width': '300px'}),
         ]),
     ]),
     dcc.Graph(id='rel-ts-chart',      style={'height': '70vh'}),
-    dcc.Graph(id='rel-scatter-chart', style={'height': '50vh', 'paddingBottom': '40px'}),
+    dcc.Graph(id='rel-scatter-chart', style={'height': '50vh'}),
+    dcc.Graph(id='rel-ccf-chart',     style={'height': '55vh', 'paddingBottom': '40px'}),
 ])
 
 
