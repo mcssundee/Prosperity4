@@ -432,9 +432,12 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
 
     # ---- Shadow Strategy ----
     html.Div(style={'padding': '0 20px 4px', 'borderTop': '1px solid #30363d', 'marginTop': '8px'}, children=[
-        html.H3("Shadow Strategy", style={'color': '#00e5ff', 'margin': '12px 0 4px'}),
-        html.P("Simulate copying a trader's trades one tick later — with and without a regime filter.",
-               style={'color': '#888', 'fontSize': '12px', 'margin': '0 0 10px'}),
+        html.H3("Shadow Strategy", style={'color': '#00e5ff', 'margin': '12px 0 4px', 'display': 'inline'}),
+        info_box("Simulates copying a trader's trades one tick later at realistic aggressive prices "
+                 "(you pay ask_price_1 to buy, hit bid_price_1 to sell). "
+                 "Blind copy = follow every trade. Filtered copy = only follow when momentum and OBI are calm, "
+                 "avoiding periods where the trader's edge disappears."),
+        html.Br(),
         html.Div(style={'display': 'flex', 'flexWrap': 'wrap', 'gap': '32px', 'alignItems': 'flex-start'}, children=[
             html.Div([
                 html.Label("Copy Trader", style={'color': '#aaaaaa', 'fontSize': '12px'}),
