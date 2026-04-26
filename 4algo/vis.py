@@ -631,6 +631,71 @@ def update_deepdive(focus_trader, metrics, product, ts_range, lookahead):
 
 
 # ---------------------------------------------------------------------------
+# Shadow strategy callback
+# ---------------------------------------------------------------------------
+@app.callback(
+    Output('shadow-chart', 'figure'),
+    Input('shadow-trader-dd', 'value'),
+    Input('mom-thr-sl',       'value'),
+    Input('obi-thr-sl',       'value'),
+    Input('product-dd',       'value'),
+    Input('ts-slider',        'value'),
+    Input('lookback-sl',      'value'),
+)
+def update_shadow(focus_trader, mom_thr, obi_thr, product, ts_range, lookahead):
+    start, end = ts_range
+    px_prod  = px_dict.get(product, px_spot)
+    pnl_data = compute_pnl(product, px_prod)
+
+    blind_df, filt_df = compute_shadow_pnl(product, px_prod, focus_trader, mom_thr, obi_thr)
+
+    fig = go.Figure()
+
+    # Original trader PnL
+    orig = pnl_data.get(focus_trader, pd.DataFrame())
+    if len(orig):
+        w = orig[(orig['timestamp'] >= start) & (orig['timestamp'] <= end)]
+        fig.add_trace(go.Scatter(
+            x=w['timestamp'], y=w['pnl'],
+            mode='lines', line=dict(color='#7c9ef5', width=1.5, dash='dot'),
+            name=f'{focus_trader} (actual)',
+            hovertemplate='Actual PnL: %{y:.1f}<extra></extra>',
+        ))
+
+    # Blind copy
+    if len(blind_df):
+        w = blind_df[(blind_df['timestamp'] >= start) & (blind_df['timestamp'] <= end)]
+        fig.add_trace(go.Scatter(
+            x=w['timestamp'], y=w['pnl'],
+            mode='lines', line=dict(color='#e74c3c', width=1.5),
+            name='Blind copy',
+            hovertemplate='Blind copy PnL: %{y:.1f}<extra></extra>',
+        ))
+
+    # Filtered copy
+    if len(filt_df):
+        w = filt_df[(filt_df['timestamp'] >= start) & (filt_df['timestamp'] <= end)]
+        fig.add_trace(go.Scatter(
+            x=w['timestamp'], y=w['pnl'],
+            mode='lines', line=dict(color='#2ecc71', width=2),
+            name=f'Filtered copy  (|mom|<{mom_thr}, |OBI|<{obi_thr})',
+            hovertemplate='Filtered PnL: %{y:.1f}<extra></extra>',
+        ))
+
+    fig.add_hline(y=0, line=dict(color='#444444', dash='dot', width=1))
+    fig.update_layout(
+        paper_bgcolor='#0d1117', plot_bgcolor='#161b22',
+        font=dict(color='#aaaaaa', family='monospace'),
+        legend=dict(bgcolor='#161b22', bordercolor='#30363d', font=dict(size=11)),
+        margin=dict(l=50, r=20, t=30, b=40),
+        hovermode='x unified',
+        xaxis=dict(title='Timestamp', gridcolor='#1f1f1f', zerolinecolor='#30363d'),
+        yaxis=dict(title='Mark-to-Market PnL', gridcolor='#1f1f1f', zerolinecolor='#30363d'),
+    )
+    return fig
+
+
+# ---------------------------------------------------------------------------
 # Main callback
 # ---------------------------------------------------------------------------
 @app.callback(
