@@ -35,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd /Users/Guan/Prosperity4 && git add -A && git diff --cached --quiet || git commit -m \"Auto-save: $(date +%Y-%m-%d_%H:%M:%S)\" && git push origin dev 2>/dev/null || true",
+            "command": "cd /Users/Guan/Prosperity4 && git add -A && git diff --cached --quiet || git commit -m \"Auto-save: $(date +%Y-%m-%d_%H:%M:%S)\"",
             "timeout": 30
           }
         ]
