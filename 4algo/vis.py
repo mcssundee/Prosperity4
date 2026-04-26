@@ -511,6 +511,28 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
                  "Colour that changes = regime-dependent, be careful."),
     ]),
     dcc.Graph(id='acf-heatmap', style={'height': '45vh', 'paddingBottom': '40px'}),
+
+    # ---- HYDROGEL Price Structure ----
+    html.Div(style={'padding': '0 20px 4px', 'borderTop': '1px solid #30363d', 'marginTop': '8px'}, children=[
+        html.H3("HYDROGEL_PACK — Price Structure",
+                style={'color': '#00e5ff', 'margin': '12px 0 4px', 'display': 'inline'}),
+        info_box("Full 3-day price series for HYDROGEL_PACK. "
+                 "The rolling mean is a simple fair value proxy — it shows where the price 'should' be "
+                 "based on recent history. Deviation below shows how far price strays from that level. "
+                 "If the deviation reliably snaps back to zero, the fair value model is usable for a maker strategy."),
+        html.Br(),
+        html.Div([
+            html.Label("Fair value window (ticks)", style={'color': '#aaaaaa', 'fontSize': '12px'}),
+            dcc.Slider(
+                id='fv-window-sl',
+                min=1000, max=100000, step=1000, value=10000,
+                marks={1000: '1k', 10000: '10k', 50000: '50k', 100000: '100k'},
+                tooltip={'placement': 'bottom', 'always_visible': True},
+            ),
+        ], style={'width': '320px', 'padding': '8px 0'}),
+    ]),
+    dcc.Graph(id='hydro-price-chart',  style={'height': '65vh'}),
+    dcc.Graph(id='hydro-dist-chart',   style={'height': '40vh', 'paddingBottom': '40px'}),
 ])
 
 
