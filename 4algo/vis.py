@@ -865,7 +865,7 @@ def update(product, selected_traders, ts_range, lookahead):
 
 
 # ---------------------------------------------------------------------------
-# HYDROGEL ACF + CCF (returns only)
+# HYDROGEL ACF
 # ---------------------------------------------------------------------------
 @app.callback(
     Output('rel-acf-chart', 'figure'),
