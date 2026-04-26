@@ -431,35 +431,22 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
     ]),
     dcc.Graph(id='shadow-chart', style={'height': '45vh', 'padding': '0 0 20px'}),
 
-    # ---- Relationship Analysis ----
+    # ---- HYDROGEL Analysis ----
     html.Div(style={'padding': '0 20px 4px', 'borderTop': '1px solid #30363d', 'marginTop': '8px'}, children=[
-        html.H3("HYDROGEL_PACK vs VELVETFRUIT_EXTRACT — Relationship Analysis",
+        html.H3("HYDROGEL_PACK — Autocorrelation & Cross-correlation Analysis",
                 style={'color': '#00e5ff', 'margin': '12px 0 4px'}),
-        html.Div(style={'display': 'flex', 'gap': '32px', 'alignItems': 'flex-end', 'flexWrap': 'wrap',
-                        'padding': '0 0 8px'}, children=[
-            html.Div([
-                html.Label("Rolling window (ticks)", style={'color': '#aaaaaa', 'fontSize': '12px'}),
-                dcc.Slider(
-                    id='rel-window-sl',
-                    min=1000, max=50000, step=1000, value=10000,
-                    marks={1000: '1k', 10000: '10k', 25000: '25k', 50000: '50k'},
-                    tooltip={'placement': 'bottom', 'always_visible': True},
-                ),
-            ], style={'width': '300px'}),
-            html.Div([
-                html.Label("Max lag (ticks) for CCF", style={'color': '#aaaaaa', 'fontSize': '12px'}),
-                dcc.Slider(
-                    id='rel-lag-sl',
-                    min=10, max=500, step=10, value=100,
-                    marks={10: '10', 100: '100', 250: '250', 500: '500'},
-                    tooltip={'placement': 'bottom', 'always_visible': True},
-                ),
-            ], style={'width': '300px'}),
-        ]),
+        html.Div([
+            html.Label("Max lag (ticks)", style={'color': '#aaaaaa', 'fontSize': '12px'}),
+            dcc.Slider(
+                id='rel-lag-sl',
+                min=10, max=500, step=10, value=100,
+                marks={10: '10', 100: '100', 250: '250', 500: '500'},
+                tooltip={'placement': 'bottom', 'always_visible': True},
+            ),
+        ], style={'width': '300px', 'padding': '0 0 8px'}),
     ]),
-    dcc.Graph(id='rel-ts-chart',      style={'height': '70vh'}),
-    dcc.Graph(id='rel-scatter-chart', style={'height': '50vh'}),
-    dcc.Graph(id='rel-ccf-chart',     style={'height': '55vh', 'paddingBottom': '40px'}),
+    dcc.Graph(id='rel-acf-chart', style={'height': '45vh'}),
+    dcc.Graph(id='rel-ccf-chart', style={'height': '45vh', 'paddingBottom': '40px'}),
 ])
 
 
