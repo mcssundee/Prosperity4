@@ -34,9 +34,24 @@ class Logger:
 
 logger = Logger()
 
-CENTER = 10000
 EOD_START = 990_000
-EOD_HARD  = 999_900
+
+# Slow EMA of mid price — used as adaptive fair value for mean-reversion takes.
+# Alpha=0.002 ≈ 500-tick half-life; tracks intraday drift without chasing noise.
+EMA_ALPHA = 0.002
+
+# Symmetric take threshold in ticks (applied to the ema, not hardcoded 10000).
+# We buy aggressively when best_ask is this many ticks below ema,
+# and sell aggressively when best_bid is this many ticks above ema.
+# 8 ticks ≈ half the 16-tick spread — only fires when price is meaningfully dislocated.
+TAKE_THRESH = 8
+
+# Passive quote skew parameters.
+# Inventory skew: shift quotes 1 tick per INV_DIV units of open position.
+# Mean-rev skew: shift quotes 1 tick per MR_DIV ticks of mid deviation from ema.
+# Both pull the quotes toward zero inventory and toward fair value.
+INV_DIV = 30
+MR_DIV  = 20
 
 
 class Trader:
@@ -60,27 +75,29 @@ class Trader:
         product = 'HYDROGEL_PACK'
         pos_lim = 200
         quote_size = 8
-        # How far from CENTER before we lean harder on inventory skew
-        inv_skew_div = 30   # 1 tick per 30 units of position
-        mr_skew_div  = 20   # 1 tick per 20 units deviation from CENTER
 
+        ema = shared.get('hp_ema')
         last_m38_ts = shared.get('last_m38_ts', state.timestamp)
 
         od = state.order_depths.get(product)
         if not od or not od.buy_orders or not od.sell_orders:
-            return [], {'last_m38_ts': last_m38_ts}
+            return [], {'hp_ema': ema, 'last_m38_ts': last_m38_ts}
 
         best_bid = max(od.buy_orders)
         best_ask = min(od.sell_orders)
         mid = (best_bid + best_ask) / 2.0
 
-        # Track Mark 38 timing for size boost
+        # Adaptive fair value: slow EMA tracks intraday drift
+        ema = mid if ema is None else EMA_ALPHA * mid + (1 - EMA_ALPHA) * ema
+        fair = ema
+
+        # Mark 38 timing: size up when they're statistically due (median gap ~700ts)
         m38_now = [t for t in state.market_trades.get(product, [])
                    if t.buyer == 'Mark 38' or t.seller == 'Mark 38']
         if m38_now:
             last_m38_ts = state.timestamp
         gap = state.timestamp - last_m38_ts
-        size_boost = 2 if gap >= 600 else 1
+        qs = quote_size * (2 if gap >= 600 else 1)
 
         pos = state.position.get(product, 0)
         buy_cap = pos_lim - pos
@@ -88,10 +105,10 @@ class Trader:
         ts = state.timestamp
         orders = []
 
-        # --- EOD flattening: hit every available level to close position ---
+        # --- EOD: hit every available level to close position flat ---
         if ts >= EOD_START and pos != 0:
             remaining = abs(pos)
-            if pos > 0:  # long — need to sell; hit all bids
+            if pos > 0:
                 for bid in sorted(od.buy_orders, reverse=True):
                     if sell_cap <= 0 or remaining <= 0:
                         break
@@ -99,7 +116,7 @@ class Trader:
                     orders.append(Order(product, bid, -qty))
                     sell_cap -= qty
                     remaining -= qty
-            else:  # short — need to buy; lift all asks
+            else:
                 for ask in sorted(od.sell_orders):
                     if buy_cap <= 0 or remaining <= 0:
                         break
@@ -107,42 +124,42 @@ class Trader:
                     orders.append(Order(product, ask, qty))
                     buy_cap -= qty
                     remaining -= qty
-            return orders, {'last_m38_ts': last_m38_ts}
+            return orders, {'hp_ema': ema, 'last_m38_ts': last_m38_ts}
 
-        # --- Aggressive take: mean-reversion when price far from CENTER ---
-        # buy when ask is well below CENTER, sell when bid is well above CENTER
+        # --- Aggressive take: symmetric mean-reversion around adaptive fair ---
+        # Buy when ask is meaningfully below fair (price dislocated low).
+        # Sell when bid is meaningfully above fair (price dislocated high).
         for ask in sorted(od.sell_orders):
-            if ask < CENTER - 8 and buy_cap > 0:
+            if ask < fair - TAKE_THRESH and buy_cap > 0:
                 qty = min(buy_cap, abs(od.sell_orders[ask]))
                 orders.append(Order(product, ask, qty))
                 buy_cap -= qty
         for bid in sorted(od.buy_orders, reverse=True):
-            if bid > CENTER + 8 and sell_cap > 0:
+            if bid > fair + TAKE_THRESH and sell_cap > 0:
                 qty = min(sell_cap, od.buy_orders[bid])
                 orders.append(Order(product, bid, -qty))
                 sell_cap -= qty
 
         # --- Passive inside-spread quotes ---
-        # Post one tick inside best bid/ask so we're always first in queue
-        # Combined inventory + mean-reversion skew
-        inv_skew = -round(pos / inv_skew_div)
-        mr_skew  = -round((mid - CENTER) / mr_skew_div)
+        # Post 1 tick inside best bid/ask — we become the sole best bid/ask,
+        # so Mark 38 (who always hits best bid/ask) fills us every visit.
+        # Skew both sides by inventory + mean-reversion signal to stay flat.
+        inv_skew = -round(pos / INV_DIV)
+        mr_skew  = -round((mid - fair) / MR_DIV)
         skew = inv_skew + mr_skew
 
         bid_px = best_bid + 1 + skew
         ask_px = best_ask - 1 + skew
 
-        # Safety guards: never cross, never worse than best book price
-        if bid_px >= ask_px:
-            bid_px = ask_px - 1
-        # Don't quote above best_ask or below best_bid (would cross the market)
+        # Guards: never cross, never outside the existing book
         bid_px = min(bid_px, best_ask - 1)
         ask_px = max(ask_px, best_bid + 1)
+        if bid_px >= ask_px:
+            bid_px = ask_px - 1
 
-        qs = quote_size * size_boost
         if buy_cap > 0:
             orders.append(Order(product, bid_px, min(qs, buy_cap)))
         if sell_cap > 0:
             orders.append(Order(product, ask_px, -min(qs, sell_cap)))
 
-        return orders, {'last_m38_ts': last_m38_ts}
+        return orders, {'hp_ema': ema, 'last_m38_ts': last_m38_ts}
