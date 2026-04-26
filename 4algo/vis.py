@@ -431,9 +431,9 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
     ]),
     dcc.Graph(id='shadow-chart', style={'height': '45vh', 'padding': '0 0 20px'}),
 
-    # ---- HYDROGEL Analysis ----
+    # ---- HYDROGEL ACF ----
     html.Div(style={'padding': '0 20px 4px', 'borderTop': '1px solid #30363d', 'marginTop': '8px'}, children=[
-        html.H3("HYDROGEL_PACK — Autocorrelation & Cross-correlation Analysis",
+        html.H3("HYDROGEL_PACK — Return Autocorrelation (ACF)",
                 style={'color': '#00e5ff', 'margin': '12px 0 4px'}),
         html.Div([
             html.Label("Max lag (ticks)", style={'color': '#aaaaaa', 'fontSize': '12px'}),
@@ -445,8 +445,7 @@ app.layout = html.Div(style={'backgroundColor': '#0d1117', 'minHeight': '100vh',
             ),
         ], style={'width': '300px', 'padding': '0 0 8px'}),
     ]),
-    dcc.Graph(id='rel-acf-chart', style={'height': '45vh'}),
-    dcc.Graph(id='rel-ccf-chart', style={'height': '45vh', 'paddingBottom': '40px'}),
+    dcc.Graph(id='rel-acf-chart', style={'height': '45vh', 'paddingBottom': '40px'}),
 ])
 
 
