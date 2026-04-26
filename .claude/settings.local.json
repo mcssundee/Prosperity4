@@ -54,7 +54,9 @@
       "Bash(gh repo *)",
       "Bash(chmod +x *)",
       "Bash(./backtesting/run.sh trader.py 4-1 --no-vis --no-out)",
-      "Bash(pip3 install *)"
+      "Bash(pip3 install *)",
+      "Bash(./backtesting/run.sh trader.py 4 --no-vis --no-out)",
+      "Bash(./backtesting/run.sh round4/algo/get_mark38_test.py 4 --no-vis --no-out)"
     ]
   }
 }
