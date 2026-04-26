@@ -59,11 +59,11 @@ class Trader:
         product     = 'HYDROGEL_PACK'
         result      = []
         pos_lim     = 200
-        quote_size  = 15
+        quote_size  = 8
         half_spread = 4
-        skew_rate   = 0.40
         fv_window   = 20
-        unwind_thr  = 40
+        flat_thr    = 8
+        unwind_thr  = 30
 
         mid_hist = shared.get('hp_mid_hist', [])
 
@@ -87,10 +87,8 @@ class Trader:
         buy_cap  = pos_lim - pos
         sell_cap = pos_lim + pos
 
-        skew   = int(pos * skew_rate)
-        bid_px = fair - half_spread - skew
-        ask_px = fair + half_spread - skew
-
+        bid_px = fair - half_spread
+        ask_px = fair + half_spread
         if best_ask is not None:
             bid_px = min(bid_px, best_ask - 1)
         if best_bid is not None:
@@ -99,27 +97,23 @@ class Trader:
         if pos > unwind_thr and sell_cap > 0 and bids:
             qty = min(sell_cap, quote_size, od.buy_orders[bids[0]])
             result.append(Order(product, bids[0], -qty))
-            sell_cap -= qty
-        elif pos < -unwind_thr and buy_cap > 0 and asks:
+            return result, {'hp_mid_hist': mid_hist}
+
+        if pos < -unwind_thr and buy_cap > 0 and asks:
             qty = min(buy_cap, quote_size, abs(od.sell_orders[asks[0]]))
             result.append(Order(product, asks[0], qty))
-            buy_cap -= qty
+            return result, {'hp_mid_hist': mid_hist}
 
-        if abs(pos) < unwind_thr:
-            for ask in asks:
-                if ask < fair - half_spread and buy_cap > 0:
-                    qty = min(buy_cap, abs(od.sell_orders[ask]))
-                    result.append(Order(product, ask, qty))
-                    buy_cap -= qty
-            for bid in bids:
-                if bid > fair + half_spread and sell_cap > 0:
-                    qty = min(sell_cap, od.buy_orders[bid])
-                    result.append(Order(product, bid, -qty))
-                    sell_cap -= qty
-
-        if buy_cap > 0:
-            result.append(Order(product, bid_px, min(quote_size, buy_cap)))
-        if sell_cap > 0:
-            result.append(Order(product, ask_px, -min(quote_size, sell_cap)))
+        if pos >= flat_thr:
+            if sell_cap > 0:
+                result.append(Order(product, ask_px, -min(quote_size, sell_cap)))
+        elif pos <= -flat_thr:
+            if buy_cap > 0:
+                result.append(Order(product, bid_px, min(quote_size, buy_cap)))
+        else:
+            if buy_cap > 0:
+                result.append(Order(product, bid_px, min(quote_size, buy_cap)))
+            if sell_cap > 0:
+                result.append(Order(product, ask_px, -min(quote_size, sell_cap)))
 
         return result, {'hp_mid_hist': mid_hist}
